@@ -21,6 +21,11 @@ test("classifyClosingIntent: permission examples -> permission", () => {
   assert.equal(classifyClosingIntent("I request permission to attend the programme tomorrow."), "permission");
   assert.equal(classifyClosingIntent("May I kindly be permitted to attend the programme?"), "permission");
   assert.equal(classifyClosingIntent("I seek permission to proceed on leave from Monday."), "permission");
+  assert.equal(
+    classifyClosingIntent("I intend to proceed on leave from 10 to 12 September."),
+    "permission",
+    "Phase 1.5 Part 2 worked example",
+  );
 });
 
 test("classifyClosingIntent: opinion/decision/consideration examples -> consideration", () => {
@@ -38,6 +43,11 @@ test("classifyClosingIntent: opinion/decision/consideration examples -> consider
   assert.equal(classifyClosingIntent("Your kind opinion is requested on the revised plan."), "consideration");
   assert.equal(classifyClosingIntent("Kindly consider the attached proposal."), "consideration");
   assert.equal(classifyClosingIntent("Submitted for your consideration."), "consideration");
+  assert.equal(
+    classifyClosingIntent("Due to the train schedule, the booking may kindly be shifted to 18-19 August."),
+    "consideration",
+    "Phase 1.5 Part 2 worked example",
+  );
 });
 
 test("classifyClosingIntent: priority — permission beats consideration beats info when more than one is genuinely present", () => {
@@ -51,6 +61,24 @@ test("classifyClosingIntent: priority — permission beats consideration beats i
     "consideration",
     "the ultimate purpose is seeking an opinion, not the informational lead-in",
   );
+});
+
+/* ---- Phase 1.5 Part 2 hardening: reject "simple keyword matching" false
+ * positives — a message that merely MENTIONS permission/authorization/
+ * consideration-adjacent vocabulary while reporting a past, negated, or
+ * already-settled fact must classify as info, not permission/consideration,
+ * since the underlying intent (a live request) is not actually present. */
+test("classifyClosingIntent: reporting-only sentences that merely mention permission/authorization vocabulary -> info, not permission", () => {
+  assert.equal(classifyClosingIntent("No permission is required for this internal transfer."), "info");
+  assert.equal(classifyClosingIntent("The gate pass was permitted by the duty officer yesterday."), "info");
+  assert.equal(classifyClosingIntent("Authorized personnel only are allowed inside the compound."), "info");
+  assert.equal(classifyClosingIntent("Permission was granted for the visit last week."), "info");
+});
+
+test("classifyClosingIntent: reporting-only sentences that merely mention decision/advice/judgement vocabulary -> info, not consideration", () => {
+  assert.equal(classifyClosingIntent("As per your advice, the training was conducted successfully."), "info");
+  assert.equal(classifyClosingIntent("The decision has already been made and communicated to all units."), "info");
+  assert.equal(classifyClosingIntent("Kindly note the judgement of the court was announced today."), "info");
 });
 
 test("classifyClosingIntent: conversational/acknowledgement messages -> null (no closing forced)", () => {

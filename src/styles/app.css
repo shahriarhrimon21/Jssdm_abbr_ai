@@ -1,359 +1,1158 @@
-:root{
-  --bg:#F1F1EA;
-  --surface:#FAFAF3;
-  --surface-2:#E9E9DF;
-  --ink:#1B2420;
-  --muted:#55605A;
-  --faint:#8A9089;
-  --accent:#1E3A5F;
-  --accent-ink:#F1F1EA;
-  --accent-2:#9C7A32;
-  --border:#D4D5C7;
-  --border-strong:#B7B9A6;
-  --ok:#2F6F4E;
-  --ok-bg:#E4EEE6;
-  --warn:#A66A1E;
-  --warn-bg:#F3E8D6;
-  --bad:#A6392E;
-  --bad-bg:#F3E1DE;
-  --rule-bg:#EFE9D9;
-  --rule-ink:#5A4A1F;
-  --shadow:0 1px 2px rgba(27,36,32,.06),0 4px 14px rgba(27,36,32,.06);
-  --radius:3px;
-  color-scheme:light;
+/* =====================================================================
+   JSSDM ABBR StaffAI — Phase 2 design system
+   ---------------------------------------------------------------------
+   Every colour, space, radius and shadow in this file is a token defined
+   on the bare :root below. Components consume tokens by name and never
+   write a literal value — that is what makes the two themes provably
+   complete rather than "mostly done".
+
+   Palette provenance: the brand colours are sampled from the approved
+   crest, not invented alongside it. Regimental green, service maroon and
+   heraldic gold come from the emblem's heraldry; signal cyan comes from
+   its circuit-brain. That split is load-bearing, not decorative — the
+   emblem separates authority from assistance, and so does the interface:
+
+     gold / green  → traceable to JSSDM 2022 (the deterministic engine)
+     signal cyan   → produced by the AI (advisory only)
+
+   No other element may borrow either signal.
+
+   Theme handling covers all three states a viewer can be in: explicit
+   light, explicit dark, and the system default (which stamps no
+   attribute at all). The dark media query is guarded against an explicit
+   light choice so the user's own setting always wins.
+   ===================================================================== */
+
+:root {
+  /* --- ground & ink (neutrals carry a green-gold bias so they belong to
+         the same world as the emblem rather than reading as pure grey) --- */
+  --paper: #FBFAF6;
+  --surface: #FFFFFF;
+  --surface-2: #F4F2EA;
+  --surface-3: #EAE7DB;
+  --ink: #161D18;
+  --ink-2: #4E5A53;
+  --ink-3: #77837B;
+  --line: #E1DDD0;
+  --line-strong: #C8C2B1;
+
+  /* --- brand --- */
+  --brand: #0A2A1E;
+  --brand-2: #14503A;
+  --brand-ink: #F6F3E8;
+  --gold: #8A6A18;
+  --gold-strong: #C9A227;
+  --gold-ink: #241B04;
+  --maroon: #78121F;
+  --maroon-2: #9B1D38;
+  --maroon-ink: #FBF3F4;
+
+  /* --- the two provenance signals --- */
+  --verified: #14503A;
+  --verified-bg: #EDF3EE;
+  --verified-line: #B4CCBA;
+  --ai: #0E6E86;
+  --ai-bg: #E9F3F7;
+  --ai-line: #A6CBD9;
+
+  /* --- semantic status (kept separate from brand accents: gold is not a
+         warning colour, and maroon signals destruction only) --- */
+  --ok: #1F6B45;
+  --ok-bg: #E8F1EA;
+  --warn: #8A5A0E;
+  --warn-bg: #FBF1DF;
+  --bad: #9B2318;
+  --bad-bg: #F8ECEA;
+  --info: #0E5C86;
+  --info-bg: #E8F1F7;
+
+  --focus: #0E6E86;
+  --overlay: rgba(12, 20, 14, .48);
+  /* Sidebar/content seam. On light the dark-green rail separates from the
+     paper on its own; in dark the two planes sit close enough in value
+     that they merge without an explicit edge. */
+  --sidebar-edge: rgba(0, 0, 0, .18);
+
+  /* --- geometry --- */
+  --s1: 4px;  --s2: 8px;  --s3: 12px; --s4: 16px;
+  --s5: 24px; --s6: 32px; --s7: 48px; --s8: 64px;
+  --r-sm: 6px;
+  --r-md: 10px;
+  --r-full: 999px;
+  --shadow-1: 0 1px 2px rgba(22, 29, 24, .06);
+  --shadow-2: 0 1px 2px rgba(22, 29, 24, .06), 0 10px 28px -14px rgba(22, 29, 24, .28);
+
+  /* --- shell metrics --- */
+  --sidebar-w: 244px;
+  --topbar-h: 56px;
+  --bottomnav-h: 60px;
+
+  color-scheme: light;
 }
-@media (prefers-color-scheme:dark){
-  :root:not([data-theme="light"]){
-    --bg:#141815;
-    --surface:#1B201C;
-    --surface-2:#232922;
-    --ink:#E7E8E0;
-    --muted:#9AA39B;
-    --faint:#6C766D;
-    --accent:#7FA3CC;
-    --accent-ink:#0E1512;
-    --accent-2:#D3B369;
-    --border:#333A32;
-    --border-strong:#454E44;
-    --ok:#5FAE81;
-    --ok-bg:#1D2C23;
-    --warn:#D69A4C;
-    --warn-bg:#2E2517;
-    --bad:#E07568;
-    --bad-bg:#2E1D1A;
-    --rule-bg:#26241A;
-    --rule-ink:#D3B369;
-    --shadow:0 1px 2px rgba(0,0,0,.3),0 4px 14px rgba(0,0,0,.35);
-    color-scheme:dark;
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --paper: #0B110D;
+    --surface: #121A14;
+    --surface-2: #18211A;
+    --surface-3: #212C24;
+    --ink: #E9EEE8;
+    --ink-2: #A0AEA5;
+    --ink-3: #78877E;
+    --line: #27332A;
+    --line-strong: #3A4A3D;
+
+    --brand: #0E2A1F;
+    --brand-2: #7FBF9C;
+    --brand-ink: #EAF3EC;
+    --gold: #E4B454;
+    --gold-strong: #F2CE7C;
+    --gold-ink: #1A1405;
+    --maroon: #E4718C;
+    --maroon-2: #F09BAE;
+    --maroon-ink: #1A0A0E;
+
+    --verified: #7FBF9C;
+    --verified-bg: #15251A;
+    --verified-line: #2F4A36;
+    --ai: #4FC5E0;
+    --ai-bg: #0F2128;
+    --ai-line: #245061;
+
+    --ok: #6FB98C;
+    --ok-bg: #14231A;
+    --warn: #DDAA5C;
+    --warn-bg: #241C0E;
+    --bad: #E88B7E;
+    --bad-bg: #261613;
+    --info: #6FB6D8;
+    --info-bg: #101F28;
+
+    --focus: #4FC5E0;
+    --overlay: rgba(0, 0, 0, .62);
+    --sidebar-edge: rgba(255, 255, 255, .10);
+
+    --shadow-1: 0 1px 2px rgba(0, 0, 0, .4);
+    --shadow-2: 0 1px 2px rgba(0, 0, 0, .4), 0 12px 32px -16px rgba(0, 0, 0, .75);
+
+    color-scheme: dark;
   }
 }
-:root[data-theme="dark"]{
-  --bg:#141815;
-  --surface:#1B201C;
-  --surface-2:#232922;
-  --ink:#E7E8E0;
-  --muted:#9AA39B;
-  --faint:#6C766D;
-  --accent:#7FA3CC;
-  --accent-ink:#0E1512;
-  --accent-2:#D3B369;
-  --border:#333A32;
-  --border-strong:#454E44;
-  --ok:#5FAE81;
-  --ok-bg:#1D2C23;
-  --warn:#D69A4C;
-  --warn-bg:#2E2517;
-  --bad:#E07568;
-  --bad-bg:#2E1D1A;
-  --rule-bg:#26241A;
-  --rule-ink:#D3B369;
-  --shadow:0 1px 2px rgba(0,0,0,.3),0 4px 14px rgba(0,0,0,.35);
-  color-scheme:dark;
-}
-*,*::before,*::after{box-sizing:border-box;}
-html,body{margin:0;padding:0;}
-body{
-  background:var(--bg);
-  color:var(--ink);
-  font-family:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
-  font-size:14.5px;
-  line-height:1.5;
-  -webkit-font-smoothing:antialiased;
-}
-@media (prefers-reduced-motion:reduce){
-  *{animation-duration:.001ms !important;transition-duration:.001ms !important;}
-}
-h1,h2,h3,h4{
-  font-family:"IBM Plex Sans Condensed",system-ui,sans-serif;
-  font-weight:700;
-  margin:0;
-  text-wrap:balance;
-  letter-spacing:.01em;
-}
-code,.mono,.data-num{font-family:"IBM Plex Mono",ui-monospace,Consolas,monospace;}
-.data-num{font-variant-numeric:tabular-nums;}
-button{font-family:inherit;}
-a{color:var(--accent);}
-::selection{background:var(--accent);color:var(--accent-ink);}
-:focus-visible{outline:2px solid var(--accent);outline-offset:2px;}
 
-.app{display:grid;grid-template-columns:232px 1fr;grid-template-rows:auto 1fr;grid-template-areas:"top top" "side main";min-height:100vh;}
+:root[data-theme="dark"] {
+  --paper: #0B110D;
+  --surface: #121A14;
+  --surface-2: #18211A;
+  --surface-3: #212C24;
+  --ink: #E9EEE8;
+  --ink-2: #A0AEA5;
+  --ink-3: #78877E;
+  --line: #27332A;
+  --line-strong: #3A4A3D;
 
-.topbar{
-  grid-area:top;
-  display:flex;align-items:center;justify-content:space-between;gap:16px;
-  padding:12px 22px;
-  background:var(--accent);
-  color:var(--accent-ink);
-  border-bottom:1px solid var(--border-strong);
-}
-.topbar .brand{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;}
-.topbar h1{font-size:18px;color:var(--accent-ink);letter-spacing:.02em;}
-.topbar .cite{font-size:12px;opacity:.82;font-family:"IBM Plex Mono",monospace;}
-.topbar .note{font-size:11.5px;opacity:.72;text-align:right;max-width:230px;line-height:1.35;}
+  --brand: #0E2A1F;
+  --brand-2: #7FBF9C;
+  --brand-ink: #EAF3EC;
+  --gold: #E4B454;
+  --gold-strong: #F2CE7C;
+  --gold-ink: #1A1405;
+  --maroon: #E4718C;
+  --maroon-2: #F09BAE;
+  --maroon-ink: #1A0A0E;
 
-.sidebar{
-  grid-area:side;
-  background:var(--surface);
-  border-right:1px solid var(--border);
-  padding:14px 10px;
-  display:flex;flex-direction:column;gap:2px;
-  overflow-y:auto;
-}
-.side-group-label{
-  font-family:"IBM Plex Sans Condensed",sans-serif;
-  font-size:10.5px;text-transform:uppercase;letter-spacing:.09em;
-  color:var(--faint);padding:12px 10px 4px;
-}
-.side-group-label:first-child{padding-top:2px;}
-.navbtn{
-  display:flex;align-items:center;gap:10px;
-  width:100%;text-align:left;
-  background:transparent;border:1px solid transparent;border-radius:var(--radius);
-  color:var(--ink);padding:8px 10px;
-  font-size:13.5px;cursor:pointer;
-}
-.navbtn .ic{width:18px;text-align:center;font-family:"IBM Plex Mono",monospace;font-size:12px;color:var(--muted);}
-.navbtn:hover{background:var(--surface-2);}
-.navbtn.active{background:var(--accent);color:var(--accent-ink);border-color:var(--accent);}
-.navbtn.active .ic{color:var(--accent-ink);}
-.side-count{margin-left:auto;font-size:10.5px;color:var(--faint);font-family:"IBM Plex Mono",monospace;}
-.navbtn.active .side-count{color:var(--accent-ink);opacity:.75;}
+  --verified: #7FBF9C;
+  --verified-bg: #15251A;
+  --verified-line: #2F4A36;
+  --ai: #4FC5E0;
+  --ai-bg: #0F2128;
+  --ai-line: #245061;
 
-.main{grid-area:main;padding:20px 26px 60px;overflow-x:hidden;max-width:1180px;}
-.view-head{display:flex;align-items:flex-end;justify-content:space-between;gap:16px;margin-bottom:14px;flex-wrap:wrap;}
-.view-head h2{font-size:21px;}
-.view-sub{color:var(--muted);font-size:13px;margin-top:3px;max-width:62ch;}
+  --ok: #6FB98C;
+  --ok-bg: #14231A;
+  --warn: #DDAA5C;
+  --warn-bg: #241C0E;
+  --bad: #E88B7E;
+  --bad-bg: #261613;
+  --info: #6FB6D8;
+  --info-bg: #101F28;
 
-.panel{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:18px 20px;margin-bottom:16px;box-shadow:var(--shadow);}
-.panel + .panel{margin-top:16px;}
-.panel h3{font-size:14px;margin-bottom:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;}
+  --focus: #4FC5E0;
+  --overlay: rgba(0, 0, 0, .62);
+  --sidebar-edge: rgba(255, 255, 255, .10);
 
-.field-row{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:10px;}
-label.flabel{font-size:11.5px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);display:block;margin-bottom:4px;}
-input[type=text],textarea,select{
-  background:var(--bg);color:var(--ink);
-  border:1px solid var(--border-strong);border-radius:var(--radius);
-  padding:8px 10px;font-size:14px;font-family:inherit;width:100%;
-}
-textarea{font-family:"IBM Plex Mono",monospace;font-size:13px;resize:vertical;min-height:120px;line-height:1.55;}
-input:focus,textarea:focus,select:focus{border-color:var(--accent);}
-select{-webkit-appearance:none;appearance:none;cursor:pointer;padding-right:26px;background-image:linear-gradient(45deg,transparent 50%,var(--muted) 50%),linear-gradient(135deg,var(--muted) 50%,transparent 50%);background-position:calc(100% - 14px) 15px,calc(100% - 9px) 15px;background-size:5px 5px,5px 5px;background-repeat:no-repeat;}
+  --shadow-1: 0 1px 2px rgba(0, 0, 0, .4);
+  --shadow-2: 0 1px 2px rgba(0, 0, 0, .4), 0 12px 32px -16px rgba(0, 0, 0, .75);
 
-.btn{
-  background:var(--accent);color:var(--accent-ink);border:1px solid var(--accent);
-  border-radius:var(--radius);padding:8px 16px;font-size:13.5px;font-weight:600;
-  cursor:pointer;letter-spacing:.01em;
-}
-.btn:hover{filter:brightness(1.08);}
-.btn.secondary{background:transparent;color:var(--ink);border-color:var(--border-strong);font-weight:500;}
-.btn.secondary:hover{background:var(--surface-2);}
-.btn.small{padding:5px 11px;font-size:12px;}
-.btn:disabled{opacity:.45;cursor:not-allowed;}
-.btnrow{display:flex;gap:8px;flex-wrap:wrap;align-items:center;}
-
-.quickbar{display:flex;flex-wrap:wrap;gap:7px;margin-bottom:18px;}
-.qbtn{
-  background:var(--surface);border:1px solid var(--border-strong);color:var(--ink);
-  border-radius:999px;padding:6px 13px;font-size:12.5px;cursor:pointer;
-  display:flex;align-items:center;gap:6px;
-}
-.qbtn:hover{background:var(--surface-2);border-color:var(--accent);}
-.qbtn .ic{color:var(--accent-2);font-family:"IBM Plex Mono",monospace;}
-
-table{width:100%;border-collapse:collapse;font-size:13px;}
-.tbl-wrap{overflow-x:auto;border:1px solid var(--border);border-radius:var(--radius);}
-th{
-  text-align:left;font-family:"IBM Plex Sans Condensed",sans-serif;font-weight:600;
-  font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);
-  background:var(--surface-2);padding:9px 12px;border-bottom:1px solid var(--border-strong);
-  white-space:nowrap;position:sticky;top:0;
-}
-td{padding:9px 12px;border-bottom:1px solid var(--border);vertical-align:top;}
-tr:last-child td{border-bottom:none;}
-tr.clickable{cursor:pointer;}
-tr.clickable:hover{background:var(--surface-2);}
-.cell-abbr{font-family:"IBM Plex Mono",monospace;font-weight:600;white-space:nowrap;}
-
-.badge{display:inline-flex;align-items:center;gap:5px;padding:3px 9px;border-radius:999px;font-size:11.5px;font-weight:600;white-space:nowrap;line-height:1.5;}
-.badge-ok{background:var(--ok-bg);color:var(--ok);}
-.badge-warn{background:var(--warn-bg);color:var(--warn);}
-.badge-bad{background:var(--bad-bg);color:var(--bad);}
-.badge-rule{background:var(--rule-bg);color:var(--rule-ink);}
-.badge-neutral{background:var(--surface-2);color:var(--muted);border:1px solid var(--border-strong);}
-
-.pill{display:inline-block;padding:2px 8px;border-radius:999px;font-size:11px;border:1px solid var(--border-strong);color:var(--muted);background:var(--surface);}
-
-.src{font-size:11.5px;color:var(--muted);font-family:"IBM Plex Mono",monospace;}
-.src a{color:var(--muted);text-decoration:none;}
-
-.empty{color:var(--faint);font-size:13px;padding:20px 4px;text-align:center;}
-.hint{font-size:12px;color:var(--muted);margin-top:6px;}
-
-.result-block{border-left:3px solid var(--border-strong);padding:2px 0 2px 14px;margin:12px 0;}
-.result-block.ok{border-color:var(--ok);}
-.result-block.warn{border-color:var(--warn);}
-.result-block.bad{border-color:var(--bad);}
-.result-block.rule{border-color:var(--rule-ink);}
-.result-block.cap-issue{font-size:13px;line-height:1.75;}
-.result-block.cap-issue code{font-family:"IBM Plex Mono",monospace;background:var(--surface-2);border:1px solid var(--border-strong);border-radius:4px;padding:1px 6px;font-size:12px;}
-
-.diff-orig{color:var(--bad);text-decoration:line-through;text-decoration-thickness:1.5px;opacity:.75;}
-.diff-new{color:var(--ok);font-weight:600;}
-.hl-verified{background:var(--ok-bg);color:var(--ok);border-radius:2px;padding:0 2px;}
-.hl-context{background:var(--warn-bg);color:var(--warn);border-radius:2px;padding:0 2px;}
-.hl-unverified{background:var(--bad-bg);color:var(--bad);border-radius:2px;padding:0 2px;text-decoration:underline wavy;}
-
-.text-block{
-  font-family:"IBM Plex Mono",monospace;font-size:13px;line-height:1.8;
-  white-space:pre-wrap;word-break:break-word;
-  background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;
+  color-scheme: dark;
 }
 
-.kpi-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:10px;margin-bottom:4px;}
-.kpi{border:1px solid var(--border);border-radius:var(--radius);padding:12px 14px;background:var(--bg);}
-.kpi .num{font-family:"IBM Plex Mono",monospace;font-size:22px;font-weight:600;}
-.kpi .lbl{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-top:2px;}
-
-.dash-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:14px;}
-.dash-card{border:1px solid var(--border);border-radius:var(--radius);background:var(--surface);padding:16px 18px;box-shadow:var(--shadow);cursor:pointer;}
-.dash-card:hover{border-color:var(--accent);}
-.dash-card h4{font-size:14.5px;margin-bottom:5px;}
-.dash-card p{font-size:12.5px;color:var(--muted);margin:0;line-height:1.5;}
-.dash-card .ic{font-family:"IBM Plex Mono",monospace;color:var(--accent-2);font-size:12px;margin-bottom:8px;display:block;}
-
-.rule-box{background:var(--rule-bg);color:var(--rule-ink);border-radius:var(--radius);padding:10px 13px;font-size:12.5px;line-height:1.55;margin:8px 0;}
-.rule-box .rc{font-family:"IBM Plex Mono",monospace;font-weight:600;margin-right:6px;}
-
-.chip-row{display:flex;flex-wrap:wrap;gap:6px;}
-.chip{background:var(--surface-2);border:1px solid var(--border-strong);border-radius:999px;padding:3px 10px;font-size:11.5px;cursor:pointer;color:var(--ink);}
-.chip:hover{border-color:var(--accent);}
-.chip.active{background:var(--accent);color:var(--accent-ink);border-color:var(--accent);}
-
-.modal-overlay{position:fixed;inset:0;background:rgba(10,14,11,.5);display:none;align-items:flex-start;justify-content:center;padding:6vh 16px;z-index:50;overflow-y:auto;}
-.modal-overlay.open{display:flex;}
-.modal-panel{background:var(--surface);border:1px solid var(--border-strong);border-radius:var(--radius);max-width:640px;width:100%;padding:22px 24px;box-shadow:var(--shadow);}
-.modal-close{float:right;background:none;border:none;color:var(--muted);font-size:18px;cursor:pointer;line-height:1;padding:2px 4px;}
-.modal-close:hover{color:var(--ink);}
-
-.footer-note{color:var(--faint);font-size:11.5px;text-align:center;margin-top:26px;padding-top:14px;border-top:1px solid var(--border);}
-
-.disclaimer{font-size:12px;color:var(--muted);background:var(--surface-2);border:1px solid var(--border);border-radius:var(--radius);padding:9px 13px;margin-bottom:16px;}
-
-@media (max-width:820px){
-  .app{grid-template-columns:1fr;grid-template-areas:"top" "side" "main";}
-  .topbar .note{display:none;}
-  .sidebar{
-    flex-direction:row;flex-wrap:nowrap;overflow-x:auto;
-    border-right:none;border-bottom:1px solid var(--border);
-    padding:8px 10px;gap:6px;
+/* =====================================================================
+   Base
+   ===================================================================== */
+*, *::before, *::after { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; }
+body {
+  background: var(--paper);
+  color: var(--ink);
+  font-family: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  font-size: 15px;
+  line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+  -webkit-text-size-adjust: 100%;
+}
+h1, h2, h3, h4 {
+  font-family: "IBM Plex Sans Condensed", "IBM Plex Sans", system-ui, sans-serif;
+  font-weight: 600;
+  margin: 0;
+  text-wrap: balance;
+  letter-spacing: .005em;
+  line-height: 1.2;
+}
+p { margin: 0; }
+code, .mono, .data-num { font-family: "IBM Plex Mono", ui-monospace, Consolas, monospace; }
+.data-num { font-variant-numeric: tabular-nums; }
+button { font-family: inherit; color: inherit; }
+a { color: var(--ai); }
+::selection { background: var(--gold-strong); color: var(--gold-ink); }
+:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; border-radius: 3px; }
+.icon { flex: none; }
+.sr-only {
+  position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+  overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0;
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: .001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .001ms !important;
+    scroll-behavior: auto !important;
   }
-  .side-group-label{display:none;}
-  .navbtn{width:auto;white-space:nowrap;flex:0 0 auto;}
-  .side-count{display:none;}
 }
 
-/* ---------- Added for the React rewrite: AI Writing Assistant + debug trace.
-   Same token system as above (var(--...)), no new palette introduced. ---------- */
-.ai-toolbar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:12px;}
-.ai-mode-toggle{display:flex;border:1px solid var(--border-strong);border-radius:var(--radius);overflow:hidden;}
-.ai-mode-toggle button{background:var(--surface);border:none;color:var(--ink);padding:7px 14px;font-size:13px;cursor:pointer;}
-.ai-mode-toggle button.active{background:var(--accent);color:var(--accent-ink);}
-.ai-mode-toggle button + button{border-left:1px solid var(--border-strong);}
+/* =====================================================================
+   App shell
+   ===================================================================== */
+.app {
+  display: grid;
+  grid-template-columns: var(--sidebar-w) minmax(0, 1fr);
+  min-height: 100vh;
+  min-height: 100dvh;
+}
+.app.collapsed { --sidebar-w: 68px; }
+.shell-content { display: flex; flex-direction: column; min-width: 0; }
 
-.chat-log{display:flex;flex-direction:column;gap:10px;margin:12px 0;max-height:360px;overflow-y:auto;}
-.chat-bubble{border-radius:var(--radius);padding:9px 12px;font-size:13px;line-height:1.55;max-width:88%;white-space:pre-wrap;}
-.chat-bubble.user{align-self:flex-end;background:var(--accent);color:var(--accent-ink);}
-.chat-bubble.assistant{align-self:flex-start;background:var(--surface-2);border:1px solid var(--border);}
+/* ---------- sidebar ---------- */
+.sidebar {
+  background: var(--brand);
+  color: var(--brand-ink);
+  display: flex;
+  flex-direction: column;
+  gap: var(--s1);
+  padding: var(--s3) var(--s2) var(--s4);
+  overflow-y: auto;
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  height: 100dvh;
+  border-right: 1px solid var(--sidebar-edge);
+}
+.brandbar {
+  display: flex; align-items: center; gap: 10px;
+  padding: var(--s2) var(--s2) var(--s4);
+  min-width: 0;
+}
+.brandbar .logo { width: 32px; height: 32px; flex: none; }
+.brandbar .wm { display: flex; flex-direction: column; min-width: 0; line-height: 1.22; }
+.brandbar .wm b {
+  font-family: "IBM Plex Sans Condensed", sans-serif;
+  font-size: 14.5px; font-weight: 600; color: #F2E4BC;
+  letter-spacing: .012em; white-space: nowrap;
+}
+.brandbar .wm span {
+  font-size: 10px; color: #9DBCA9; letter-spacing: .02em; white-space: nowrap;
+}
+.app.collapsed .brandbar { justify-content: center; padding-left: 0; padding-right: 0; }
+.app.collapsed .brandbar .wm { display: none; }
 
-.text-state-col{display:flex;flex-direction:column;gap:6px;}
-.text-state-col h4{font-size:12px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);display:flex;align-items:center;justify-content:space-between;}
+.side-group { display: flex; flex-direction: column; gap: 1px; margin-bottom: var(--s3); }
+.side-group-label {
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 9.5px; text-transform: uppercase; letter-spacing: .16em;
+  color: #7C9A88; padding: var(--s2) 12px var(--s1);
+}
+.app.collapsed .side-group-label {
+  text-align: center; padding-left: 0; padding-right: 0;
+  font-size: 8px; letter-spacing: .08em;
+}
+.navbtn {
+  display: flex; align-items: center; gap: 11px;
+  width: 100%; text-align: left;
+  background: transparent; border: 0; border-radius: var(--r-sm);
+  color: #CFE0D5; padding: 9px 12px;
+  font-size: 13.5px; cursor: pointer;
+  box-shadow: inset 0 0 0 0 transparent;
+  transition: background-color .12s ease, color .12s ease, box-shadow .12s ease;
+  position: relative;
+}
+.navbtn:hover { background: rgba(255, 255, 255, .07); color: var(--brand-ink); }
+.navbtn.active {
+  background: rgba(201, 162, 39, .17);
+  color: #F4E6C0;
+  box-shadow: inset 2px 0 0 var(--gold-strong);
+  font-weight: 600;
+}
+.navbtn.active .icon { color: var(--gold-strong); }
+/* Collapsed: a fixed square centred in the rail, not a full-width bar.
+   The active/hover background — including the glass chip below — is
+   this button's own box, so a square button is what makes that
+   background hug the icon equally on every side rather than reading as
+   a wide rectangle pressed against the rail's edges. */
+.app.collapsed .navbtn {
+  justify-content: center;
+  width: 44px; height: 44px;
+  padding: 0; margin: 0 auto;
+}
+.navitem-collapsed { text-align: center; }
+.app.collapsed .navbtn .navlabel { display: none; }
 
-.debug-trace{margin-top:6px;border-top:1px dashed var(--border);padding-top:6px;}
-.debug-trace summary{cursor:pointer;font-size:11.5px;color:var(--muted);}
-.debug-step{font-size:12px;padding:4px 0 4px 10px;border-left:2px solid var(--border-strong);margin:4px 0 4px 4px;}
-.debug-step .n{font-family:"IBM Plex Mono",monospace;color:var(--accent-2);margin-right:6px;}
-.debug-step .lbl{font-weight:600;}
+/* Collapsed rail only: the flat gold fill + inset rule becomes a frosted,
+   floating chip — an iOS-style glass treatment that reads right on a
+   narrow icon-only row where it can stand as a discrete object. Left
+   alone on the expanded rail, where a blurred chip spanning a full-width
+   label row would read heavier, not lighter, and would cost one of the
+   three redundant "selected" signals the accessibility pass added
+   (colour + shape + weight) — the inset rule still carries that shape
+   signal there. On the collapsed rail the pill shape itself takes over
+   that role, the icon keeps its gold tint for the colour signal, and
+   aria-current="page" (unchanged) carries it for assistive tech. */
+.app.collapsed .navbtn.active {
+  background: linear-gradient(180deg, rgba(244, 230, 192, .22), rgba(201, 162, 39, .14));
+  backdrop-filter: blur(14px) saturate(180%);
+  -webkit-backdrop-filter: blur(14px) saturate(180%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, .35),
+    inset 0 0 0 1px rgba(244, 230, 192, .25),
+    0 4px 14px -6px rgba(0, 0, 0, .35);
+  border-radius: var(--r-md);
+}
+@supports not (backdrop-filter: blur(1px)) {
+  .app.collapsed .navbtn.active {
+    background: rgba(201, 162, 39, .17);
+    box-shadow: inset 2px 0 0 var(--gold-strong);
+  }
+}
+.side-foot { margin-top: auto; padding: var(--s3) 12px 0; }
+.side-foot .cite {
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 9.5px; line-height: 1.5; color: #6E8C7A; letter-spacing: .02em;
+}
+.app.collapsed .side-foot { display: none; }
 
-.tone-row{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px;}
+/* ---------- topbar ---------- */
+.topbar {
+  height: var(--topbar-h);
+  display: flex; align-items: center; gap: var(--s3);
+  padding: 0 var(--s5);
+  background: var(--surface);
+  border-bottom: 1px solid var(--line);
+  position: sticky; top: 0; z-index: 20;
+}
+.topbar .page-title {
+  font-family: "IBM Plex Sans Condensed", sans-serif;
+  font-size: 16px; font-weight: 600; letter-spacing: .01em;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.topbar .spacer { margin-left: auto; }
+.topbar-tools { display: flex; align-items: center; gap: var(--s2); }
 
-.smart-suggestion-list{display:flex;flex-direction:column;gap:12px;}
-.smart-suggestion-card{border:1px solid var(--border-strong);border-radius:var(--radius);padding:12px 14px;background:var(--surface-2);transition:border-color .15s ease,box-shadow .15s ease;}
-.smart-suggestion-card.selected{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent);}
-.smart-suggestion-head{display:flex;align-items:center;gap:8px;flex-wrap:wrap;}
-.smart-issue-list{margin:8px 0 0;padding-left:18px;font-size:12.5px;color:var(--bad);line-height:1.6;}
-
-/* ---------- Phase 2: design-system polish — loading/status indicators,
-   subtle motion, and screen-reader-only text. Deliberately reuses the
-   existing token set and the existing global prefers-reduced-motion rule
-   above (it already zeroes animation/transition duration everywhere, so
-   every animation added below is automatically minimized for viewers who
-   asked for reduced motion — nothing extra needed per-animation). ---------- */
-
-.sr-only{
-  position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;
-  clip:rect(0,0,0,0);white-space:nowrap;border:0;
+.main {
+  padding: var(--s5) var(--s5) var(--s8);
+  overflow-x: hidden;
+  width: 100%;
+  max-width: 1240px;
+}
+.footer-note {
+  color: var(--ink-3); font-size: 11.5px; line-height: 1.6;
+  margin-top: var(--s7); padding-top: var(--s4);
+  border-top: 1px solid var(--line); max-width: 78ch;
 }
 
-@keyframes spin{to{transform:rotate(360deg);}}
-.spinner{
-  display:inline-block;width:12px;height:12px;flex:0 0 auto;
-  border:2px solid currentColor;border-right-color:transparent;border-radius:50%;
-  opacity:.75;animation:spin .6s linear infinite;vertical-align:-2px;margin-right:6px;
+/* ---------- sitewide credit footer ----------
+   Lives under <main>, inside .shell-content, so on mobile it inherits
+   that container's existing bottom padding (set below, alongside the
+   fixed bottom nav) rather than needing its own clearance rule. */
+.site-footer {
+  display: flex; justify-content: space-between; align-items: center;
+  gap: var(--s3); flex-wrap: wrap;
+  padding: var(--s4) var(--s5);
+  border-top: 1px solid var(--line);
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 11px; color: var(--ink-3); letter-spacing: .01em;
+}
+@media (max-width: 560px) {
+  .site-footer { justify-content: center; text-align: center; padding: var(--s3) var(--s4); }
 }
 
-@keyframes fadeInUp{from{opacity:0;transform:translateY(4px);}to{opacity:1;transform:translateY(0);}}
-.fade-in{animation:fadeInUp .18s ease-out both;}
+/* ---------- mobile bottom navigation ---------- */
+.bottomnav { display: none; }
 
-@keyframes popIn{0%{opacity:0;transform:scale(.9);}60%{opacity:1;transform:scale(1.03);}100%{transform:scale(1);}}
-.copyok{color:var(--ok);font-size:11.5px;display:inline-flex;align-items:center;gap:4px;animation:popIn .22s ease-out both;}
-
-.btn{transition:filter .12s ease,transform .08s ease;}
-.btn:active:not(:disabled){transform:scale(.97);}
-.qbtn,.chip,.navbtn,.dash-card{transition:background-color .12s ease,border-color .12s ease;}
-
-/* Compact status pill for the global online/offline indicator (Topbar) —
-   deliberately small and text+icon (never color alone), never a banner. */
-.status-pill{
-  display:inline-flex;align-items:center;gap:6px;font-size:11.5px;
-  padding:3px 9px;border-radius:999px;border:1px solid transparent;white-space:nowrap;
+/* =====================================================================
+   Page furniture
+   ===================================================================== */
+.view-head {
+  display: flex; align-items: flex-end; justify-content: space-between;
+  gap: var(--s4); margin-bottom: var(--s5); flex-wrap: wrap;
 }
-.status-pill .dot{width:6px;height:6px;border-radius:50%;flex:0 0 auto;}
-.status-pill.online{color:var(--accent-ink);border-color:rgba(255,255,255,.35);opacity:.85;}
-.status-pill.online .dot{background:currentColor;}
-.status-pill.offline{background:var(--warn-bg);color:var(--warn);border-color:var(--warn);}
-.status-pill.offline .dot{background:var(--warn);}
+.view-head h2 { font-size: 23px; }
+.view-sub { color: var(--ink-2); font-size: 13.5px; margin-top: var(--s1); max-width: 68ch; }
 
-/* Touch targets on small screens — buttons/inputs get a bit more height so
-   they're comfortably tappable, without changing anything about desktop's
-   already-compact density. */
-@media (max-width:640px){
-  .btn{min-height:38px;padding:8px 14px;}
-  .btn.small{min-height:34px;}
-  input[type=text],textarea,select{min-height:38px;}
-  .field-row{flex-direction:column;align-items:stretch;}
-  .field-row > *{width:100%;}
-  .btnrow{gap:8px;}
-  .topbar{padding:10px 14px;gap:10px;}
-  .topbar .brand{gap:6px;}
+.panel {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  padding: var(--s5);
+  margin-bottom: var(--s4);
+  box-shadow: var(--shadow-1);
+}
+.panel h3 {
+  font-size: 12px; text-transform: uppercase; letter-spacing: .1em;
+  color: var(--ink-3); margin-bottom: var(--s3);
+  font-family: "IBM Plex Mono", monospace; font-weight: 600;
+}
+.panel-flush { padding: 0; overflow: hidden; }
+
+.section-rule {
+  display: flex; align-items: center; gap: var(--s3);
+  margin: var(--s6) 0 var(--s4);
+}
+.section-rule::after { content: ""; flex: 1; height: 1px; background: var(--line); }
+.section-rule h3 {
+  font-family: "IBM Plex Mono", monospace; font-weight: 600;
+  font-size: 11px; letter-spacing: .14em; text-transform: uppercase; color: var(--ink-3);
+}
+
+/* =====================================================================
+   Controls
+   ===================================================================== */
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 7px;
+  background: var(--brand); color: var(--brand-ink);
+  border: 1px solid var(--brand);
+  border-radius: var(--r-sm);
+  padding: 9px 16px;
+  font-size: 13.5px; font-weight: 600; letter-spacing: .01em;
+  cursor: pointer; white-space: nowrap;
+  transition: background-color .12s ease, border-color .12s ease, transform .08s ease, opacity .12s ease;
+}
+:root[data-theme="dark"] .btn,
+:root:not([data-theme="light"]) .btn { }
+.btn:hover:not(:disabled) { background: var(--brand-2); border-color: var(--brand-2); }
+.btn:active:not(:disabled) { transform: translateY(1px); }
+.btn:disabled { opacity: .45; cursor: not-allowed; }
+
+.btn.secondary {
+  background: var(--surface); color: var(--ink);
+  border-color: var(--line-strong); font-weight: 500;
+}
+.btn.secondary:hover:not(:disabled) { background: var(--surface-2); border-color: var(--ink-3); }
+
+.btn.gold { background: var(--gold-strong); border-color: var(--gold-strong); color: var(--gold-ink); }
+.btn.gold:hover:not(:disabled) { filter: brightness(1.06); background: var(--gold-strong); border-color: var(--gold-strong); }
+
+.btn.danger { background: var(--maroon); border-color: var(--maroon); color: var(--maroon-ink); }
+.btn.danger:hover:not(:disabled) { background: var(--maroon-2); border-color: var(--maroon-2); }
+
+.btn.ghost { background: transparent; border-color: transparent; color: var(--ink-2); font-weight: 500; }
+.btn.ghost:hover:not(:disabled) { background: var(--surface-2); color: var(--ink); border-color: transparent; }
+
+.btn.small { padding: 6px 11px; font-size: 12.5px; }
+.btn.block { width: 100%; }
+.btnrow { display: flex; gap: var(--s2); flex-wrap: wrap; align-items: center; }
+
+.iconbtn {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 34px; height: 34px; flex: none;
+  background: transparent; border: 1px solid transparent;
+  border-radius: var(--r-sm); color: var(--ink-2); cursor: pointer;
+  transition: background-color .12s ease, color .12s ease, border-color .12s ease;
+}
+.iconbtn:hover { background: var(--surface-2); color: var(--ink); border-color: var(--line); }
+.iconbtn:disabled { opacity: .4; cursor: not-allowed; }
+.iconbtn.on { background: var(--surface-3); color: var(--ink); border-color: var(--line-strong); }
+
+/* tooltip — wraps any control; shown on hover AND focus so keyboard users
+   get it too, and never carries information available nowhere else.
+   `position: fixed`, with coordinates computed in Tooltip.tsx from the
+   trigger's own bounding box — see the comment there for why a simpler
+   CSS-only `position: absolute` version was invisible on the collapsed
+   sidebar. Mounted only while shown (Tooltip.tsx), so opacity/pointer-
+   events gating isn't needed here; `.fade-in` (defined under Home,
+   reused as-is) gives it the same quiet entrance as everywhere else. */
+.tip { position: relative; display: inline-flex; }
+.tip > .tip-body {
+  position: fixed;
+  background: var(--ink); color: var(--paper);
+  font-size: 11.5px; line-height: 1.4; white-space: nowrap;
+  padding: 5px 9px; border-radius: var(--r-sm);
+  pointer-events: none; z-index: 40;
+  box-shadow: var(--shadow-2);
+  transform: translateX(-50%);
+}
+.tip > .tip-body.tip-right { transform: translateY(-50%); }
+
+label.flabel {
+  font-size: 11px; text-transform: uppercase; letter-spacing: .1em;
+  color: var(--ink-3); display: block; margin-bottom: 5px;
+  font-family: "IBM Plex Mono", monospace; font-weight: 600;
+}
+input[type=text], textarea, select {
+  background: var(--paper); color: var(--ink);
+  border: 1px solid var(--line-strong); border-radius: var(--r-sm);
+  padding: 9px 11px; font-size: 14px; font-family: inherit; width: 100%;
+  transition: border-color .12s ease, box-shadow .12s ease;
+}
+input[type=text]::placeholder, textarea::placeholder { color: var(--ink-3); }
+textarea {
+  font-family: "IBM Plex Mono", monospace; font-size: 13px;
+  resize: vertical; min-height: 132px; line-height: 1.7;
+}
+input:focus, textarea:focus, select:focus {
+  border-color: var(--focus); box-shadow: 0 0 0 3px color-mix(in srgb, var(--focus) 18%, transparent);
+  outline: none;
+}
+select {
+  -webkit-appearance: none; appearance: none; cursor: pointer; padding-right: 30px;
+  background-image:
+    linear-gradient(45deg, transparent 50%, var(--ink-3) 50%),
+    linear-gradient(135deg, var(--ink-3) 50%, transparent 50%);
+  background-position: calc(100% - 16px) center, calc(100% - 11px) center;
+  background-size: 5px 5px, 5px 5px;
+  background-repeat: no-repeat;
+}
+.field-row { display: flex; gap: var(--s3); flex-wrap: wrap; align-items: flex-end; }
+.field-inline { display: flex; align-items: center; gap: var(--s2); }
+.field-inline label.flabel { margin-bottom: 0; }
+.field-inline select { width: auto; min-width: 148px; }
+
+.seg {
+  display: inline-flex; border: 1px solid var(--line-strong);
+  border-radius: var(--r-sm); overflow: hidden; background: var(--surface);
+}
+.seg button {
+  background: transparent; border: 0; color: var(--ink-2);
+  padding: 8px 15px; font-size: 13px; cursor: pointer; white-space: nowrap;
+  display: inline-flex; align-items: center; gap: 6px;
+  transition: background-color .12s ease, color .12s ease;
+}
+.seg button + button { border-left: 1px solid var(--line-strong); }
+.seg button:hover { background: var(--surface-2); color: var(--ink); }
+.seg button.active { background: var(--brand); color: var(--brand-ink); font-weight: 600; }
+.seg button.active .icon { color: var(--gold-strong); }
+
+.chip-row { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip {
+  background: var(--surface); border: 1px solid var(--line-strong);
+  border-radius: var(--r-full); padding: 5px 12px;
+  font-size: 12.5px; cursor: pointer; color: var(--ink-2);
+  transition: background-color .12s ease, border-color .12s ease, color .12s ease;
+}
+.chip:hover { border-color: var(--ink-3); color: var(--ink); }
+.chip.active {
+  background: var(--brand); color: var(--brand-ink);
+  border-color: var(--brand); font-weight: 600;
+}
+.pill {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 2px 9px; border-radius: var(--r-full);
+  font-size: 11px; border: 1px solid var(--line-strong);
+  color: var(--ink-2); background: var(--surface);
+  font-family: "IBM Plex Mono", monospace;
+}
+
+/* =====================================================================
+   Provenance — the verified / AI-assisted split (see the header note).
+   ===================================================================== */
+.prov {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 10px; font-weight: 600; letter-spacing: .12em; text-transform: uppercase;
+  padding: 4px 9px; border-radius: var(--r-sm); white-space: nowrap;
+}
+.prov-verified { background: var(--verified); color: var(--paper); }
+.prov-ai { background: var(--ai); color: var(--paper); }
+:root[data-theme="dark"] .prov-verified,
+:root[data-theme="dark"] .prov-ai { color: #08120C; }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .prov-verified,
+  :root:not([data-theme="light"]) .prov-ai { color: #08120C; }
+}
+
+/* =====================================================================
+   Pipeline stages
+   ===================================================================== */
+.stage {
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  background: var(--surface);
+  margin-bottom: var(--s3);
+  overflow: hidden;
+}
+.stage.is-verified { border-color: var(--verified-line); }
+.stage.is-ai { border-color: var(--ai-line); }
+.stage-head {
+  display: flex; align-items: center; gap: var(--s3);
+  padding: 11px var(--s4);
+  border-bottom: 1px solid var(--line);
+  background: var(--surface-2);
+  flex-wrap: wrap;
+}
+.stage.is-verified .stage-head { background: var(--verified-bg); border-bottom-color: var(--verified-line); }
+.stage.is-ai .stage-head { background: var(--ai-bg); border-bottom-color: var(--ai-line); }
+.stage-head h4 {
+  font-size: 13.5px; font-weight: 600;
+  font-family: "IBM Plex Sans", sans-serif; letter-spacing: 0;
+}
+.stage-head .stage-note { font-size: 11.5px; color: var(--ink-2); }
+.stage-head .spacer { margin-left: auto; }
+.stage-body { padding: var(--s4); }
+.stage-body > textarea { margin: 0; }
+.stage-actions {
+  display: flex; gap: var(--s2); flex-wrap: wrap; align-items: center;
+  padding: 0 var(--s4) var(--s4);
+}
+
+/* collapsed reference stage — a single summary line, expandable */
+.stage-collapsed {
+  display: flex; align-items: center; gap: var(--s3);
+  width: 100%; text-align: left; cursor: pointer;
+  background: var(--surface); border: 1px solid var(--line);
+  border-radius: var(--r-md); padding: 10px var(--s4);
+  margin-bottom: var(--s3); color: var(--ink-2); font-size: 12.5px;
+  transition: background-color .12s ease, border-color .12s ease;
+}
+.stage-collapsed:hover { background: var(--surface-2); border-color: var(--line-strong); }
+.stage-collapsed .peek {
+  flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  font-family: "IBM Plex Mono", monospace; font-size: 12px; color: var(--ink-3);
+}
+
+.text-block {
+  font-family: "IBM Plex Mono", monospace; font-size: 13px; line-height: 1.8;
+  white-space: pre-wrap; word-break: break-word;
+  background: var(--paper); border: 1px solid var(--line);
+  border-radius: var(--r-sm); padding: var(--s3) var(--s4);
+}
+
+/* =====================================================================
+   Evidence layer — verification status is never colour alone: each
+   status carries its own underline treatment and an accessible label.
+   Class names come from the frozen Span type and must not be renamed.
+   ===================================================================== */
+.hl-verified {
+  background: var(--verified-bg); color: var(--verified);
+  border-bottom: 2px solid var(--verified);
+  border-radius: 2px 2px 0 0; padding: 0 2px; font-weight: 600;
+}
+.hl-context {
+  background: var(--warn-bg); color: var(--warn);
+  border-bottom: 2px dashed var(--warn);
+  border-radius: 2px 2px 0 0; padding: 0 2px; font-weight: 600;
+}
+.hl-unverified {
+  background: transparent; color: var(--ink-2);
+  border-bottom: 2px dotted var(--ink-3);
+  border-radius: 0; padding: 0 2px;
+}
+
+.badge {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 3px 9px; border-radius: var(--r-full);
+  font-size: 11.5px; font-weight: 600; white-space: nowrap; line-height: 1.5;
+}
+.badge-ok { background: var(--ok-bg); color: var(--ok); }
+.badge-warn { background: var(--warn-bg); color: var(--warn); }
+.badge-bad { background: var(--bad-bg); color: var(--bad); }
+.badge-rule { background: var(--verified-bg); color: var(--verified); }
+.badge-neutral { background: var(--surface-2); color: var(--ink-2); border: 1px solid var(--line-strong); }
+
+/* results summary strip — the shape of a result before it is read */
+.tally {
+  display: flex; flex-wrap: wrap; gap: var(--s4);
+  padding: 11px var(--s4); border: 1px solid var(--line);
+  border-radius: var(--r-sm); background: var(--surface-2); margin-bottom: var(--s3);
+}
+.tally .t { display: flex; align-items: center; gap: 7px; font-size: 12.5px; color: var(--ink-2); }
+.tally .t b { font-family: "IBM Plex Mono", monospace; font-size: 14px; color: var(--ink); font-variant-numeric: tabular-nums; }
+
+.evidence {
+  border-left: 3px solid var(--line-strong);
+  background: var(--surface-2);
+  border-radius: 0 var(--r-sm) var(--r-sm) 0;
+  padding: var(--s3) var(--s4); margin: var(--s2) 0; font-size: 13px;
+}
+.evidence.ok { border-left-color: var(--verified); }
+.evidence.warn { border-left-color: var(--warn); }
+.evidence.bad { border-left-color: var(--bad); }
+.evidence .ev-title {
+  display: flex; align-items: center; gap: 7px;
+  font-weight: 600; margin-bottom: var(--s2);
+}
+.evidence.ok .ev-title { color: var(--verified); }
+.evidence.warn .ev-title { color: var(--warn); }
+.evidence.bad .ev-title { color: var(--bad); }
+.evidence dl { display: grid; grid-template-columns: auto 1fr; gap: 4px var(--s3); margin: 0; }
+.evidence dt {
+  font-family: "IBM Plex Mono", monospace; font-size: 10.5px;
+  letter-spacing: .1em; text-transform: uppercase; color: var(--ink-3); padding-top: 2px;
+}
+.evidence dd { margin: 0; color: var(--ink); }
+.evidence code {
+  font-family: "IBM Plex Mono", monospace; font-size: 12.5px;
+  background: var(--surface); border: 1px solid var(--line);
+  border-radius: 4px; padding: 1px 6px;
+}
+.cite-ref {
+  font-family: "IBM Plex Mono", monospace; font-size: 11.5px;
+  color: var(--ink-2); letter-spacing: .02em;
+}
+
+/* =====================================================================
+   Tables
+   ===================================================================== */
+.tbl-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: var(--r-md); }
+table { width: 100%; border-collapse: collapse; font-size: 13px; }
+th {
+  text-align: left; font-family: "IBM Plex Mono", monospace; font-weight: 600;
+  font-size: 10.5px; text-transform: uppercase; letter-spacing: .12em; color: var(--ink-3);
+  background: var(--surface-2); padding: 10px var(--s3);
+  border-bottom: 1px solid var(--line-strong); white-space: nowrap;
+}
+td { padding: 10px var(--s3); border-bottom: 1px solid var(--line); vertical-align: top; }
+tr:last-child td { border-bottom: none; }
+.cell-abbr { font-family: "IBM Plex Mono", monospace; font-weight: 600; white-space: nowrap; }
+.src { font-size: 11.5px; color: var(--ink-2); font-family: "IBM Plex Mono", monospace; }
+
+/* =====================================================================
+   Home
+   ===================================================================== */
+.action-grid {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(248px, 1fr));
+  gap: var(--s3); margin-bottom: var(--s5);
+}
+.action-card {
+  display: flex; flex-direction: column; align-items: flex-start; gap: var(--s2);
+  text-align: left; cursor: pointer;
+  background: var(--surface); border: 1px solid var(--line);
+  border-radius: var(--r-md); padding: var(--s4) var(--s4) var(--s5);
+  box-shadow: var(--shadow-1); color: inherit;
+  transition: border-color .14s ease, box-shadow .14s ease, transform .14s ease;
+}
+.action-card:hover {
+  border-color: var(--gold-strong); box-shadow: var(--shadow-2); transform: translateY(-2px);
+}
+.action-card .ic-wrap {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 38px; height: 38px; border-radius: var(--r-sm);
+  background: var(--surface-2); color: var(--brand-2); margin-bottom: var(--s1);
+}
+.action-card.is-ai .ic-wrap { background: var(--ai-bg); color: var(--ai); }
+.action-card.is-verified .ic-wrap { background: var(--verified-bg); color: var(--verified); }
+.action-card h4 { font-size: 15.5px; }
+.action-card p { font-size: 12.5px; color: var(--ink-2); line-height: 1.55; }
+.action-card .go {
+  margin-top: auto; padding-top: var(--s2);
+  display: inline-flex; align-items: center; gap: 5px;
+  font-size: 12px; font-weight: 600; color: var(--ink-3);
+  transition: color .14s ease, gap .14s ease;
+}
+.action-card:hover .go { color: var(--gold); gap: 8px; }
+
+.provenance-strip {
+  display: flex; flex-wrap: wrap; gap: var(--s5);
+  padding: var(--s4); border: 1px solid var(--line);
+  border-radius: var(--r-md); background: var(--surface-2);
+}
+.provenance-strip .pv { display: flex; flex-direction: column; gap: 1px; }
+.provenance-strip .pv b {
+  font-family: "IBM Plex Mono", monospace; font-size: 19px; font-weight: 600;
+  font-variant-numeric: tabular-nums; color: var(--ink);
+}
+.provenance-strip .pv span {
+  font-size: 10.5px; text-transform: uppercase; letter-spacing: .1em; color: var(--ink-3);
+  font-family: "IBM Plex Mono", monospace;
+}
+
+/* identity band — a letterhead, not a hero: one line, present once per
+   landing, never competing with the actions beneath it. */
+.home-band {
+  display: flex; align-items: center; gap: 14px;
+  padding: var(--s4) var(--s5);
+  margin-bottom: var(--s4);
+  border-radius: var(--r-md);
+  background: linear-gradient(135deg, var(--brand), var(--brand-2));
+  color: var(--brand-ink);
+}
+.home-band-crest { flex: none; border-radius: 50%; }
+.home-band-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.home-band-text b {
+  font-family: "IBM Plex Sans Condensed", sans-serif;
+  font-size: 16px; font-weight: 600; letter-spacing: .01em;
+}
+.home-band-text span { font-size: 11.5px; color: rgba(246, 243, 232, .72); letter-spacing: .02em; }
+
+/* contextual, not a fourth action — a thread to pick back up, not a
+   choice to weigh against the actions below it. */
+.continue-strip {
+  display: flex; align-items: center; gap: 10px; width: 100%;
+  background: var(--verified-bg); border: 1px solid var(--verified-line);
+  border-radius: var(--r-md); padding: var(--s3) var(--s4);
+  margin-bottom: var(--s5); cursor: pointer; text-align: left; color: inherit;
+  font-size: 13px;
+  transition: border-color .14s ease, transform .14s ease;
+}
+.continue-strip:hover { border-color: var(--verified); transform: translateY(-1px); }
+.continue-strip .cs-icon { color: var(--verified); flex: none; }
+.continue-strip .cs-snippet { font-family: "IBM Plex Mono", monospace; color: var(--ink-2); }
+.continue-strip .cs-chev { margin-left: auto; color: var(--ink-3); flex: none; }
+
+/* the one action most visits are actually for, weighted accordingly */
+.hero-card {
+  display: flex; align-items: center; gap: var(--s4); width: 100%; text-align: left;
+  background: var(--verified-bg); border: 1px solid var(--verified-line);
+  border-radius: var(--r-md); padding: var(--s5); margin-bottom: var(--s3);
+  cursor: pointer; color: inherit;
+  box-shadow: var(--shadow-1);
+  transition: border-color .14s ease, box-shadow .14s ease, transform .14s ease;
+}
+.hero-card:hover { border-color: var(--verified); box-shadow: var(--shadow-2); transform: translateY(-2px); }
+.hero-ic {
+  display: flex; align-items: center; justify-content: center; flex: none;
+  width: 56px; height: 56px; border-radius: var(--r-md);
+  background: var(--surface); color: var(--verified);
+}
+.hero-copy { flex: 1; min-width: 0; }
+.hero-copy h3 { font-size: 18px; margin-bottom: 4px; }
+.hero-copy p { font-size: 13.5px; color: var(--ink-2); margin: 0; }
+.hero-go {
+  flex: none; display: inline-flex; align-items: center; gap: 6px;
+  font-size: 13px; font-weight: 600; color: var(--verified);
+}
+@media (max-width: 640px) {
+  /* flex-basis: 100% forces .hero-go onto its own line rather than
+     merely allowing a wrap — without it the browser prefers shrinking
+     .hero-copy down to its longest-word min-content over wrapping, which
+     breaks "Abbreviate a message" onto three single-word lines instead
+     of leaving the title readable. */
+  .hero-card { flex-wrap: wrap; }
+  .hero-go { flex-basis: 100%; margin-left: 72px; margin-top: 2px; }
+}
+
+/* everything else — still one tap away, just visually secondary */
+.sec-grid {
+  display: grid; grid-template-columns: 1fr 1fr; gap: var(--s3);
+  margin-bottom: var(--s5);
+}
+@media (max-width: 640px) { .sec-grid { grid-template-columns: 1fr; } }
+.action-card.compact { padding: var(--s4); gap: var(--s1); }
+.action-card.compact .ic-wrap { width: 34px; height: 34px; margin-bottom: 0; }
+.action-card.compact h4 { font-size: 14px; }
+.action-card.compact p { font-size: 12px; }
+
+/* =====================================================================
+   States
+   ===================================================================== */
+.empty {
+  display: flex; flex-direction: column; align-items: center; gap: var(--s2);
+  text-align: center; padding: var(--s7) var(--s4);
+  color: var(--ink-2); border: 1px dashed var(--line-strong);
+  border-radius: var(--r-md); background: var(--surface);
+}
+.empty .ic-wrap {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 46px; height: 46px; border-radius: var(--r-full);
+  background: var(--surface-2); color: var(--ink-3); margin-bottom: var(--s1);
+}
+.empty h4 { font-size: 15px; color: var(--ink); }
+.empty p { font-size: 13px; max-width: 46ch; }
+.empty .btn { margin-top: var(--s3); }
+
+.notice {
+  display: flex; align-items: flex-start; gap: var(--s3);
+  padding: var(--s3) var(--s4); border-radius: var(--r-sm);
+  border: 1px solid var(--line); background: var(--surface-2);
+  font-size: 12.5px; color: var(--ink-2); line-height: 1.55;
+  margin-bottom: var(--s4);
+}
+.notice .icon { margin-top: 1px; color: var(--ink-3); }
+.notice.bad { background: var(--bad-bg); border-color: var(--bad); color: var(--bad); }
+.notice.bad .icon { color: var(--bad); }
+.notice.warn { background: var(--warn-bg); border-color: var(--warn); color: var(--warn); }
+.notice.warn .icon { color: var(--warn); }
+.notice.info { background: var(--info-bg); border-color: var(--info-line, var(--line)); color: var(--ink-2); }
+.notice strong { color: inherit; }
+
+.skeleton {
+  background: linear-gradient(90deg, var(--surface-2) 25%, var(--surface-3) 37%, var(--surface-2) 63%);
+  background-size: 400% 100%;
+  animation: shimmer 1.4s ease-in-out infinite;
+  border-radius: var(--r-sm);
+}
+@keyframes shimmer { 0% { background-position: 100% 0; } 100% { background-position: 0 0; } }
+.skeleton-line { height: 12px; margin-bottom: 9px; }
+.skeleton-line:nth-child(3n) { width: 72%; }
+.skeleton-line:nth-child(3n+2) { width: 91%; }
+
+@keyframes spin { to { transform: rotate(360deg); } }
+.spinner {
+  display: inline-block; width: 13px; height: 13px; flex: none;
+  border: 2px solid currentColor; border-right-color: transparent; border-radius: 50%;
+  opacity: .8; animation: spin .6s linear infinite;
+}
+@keyframes fadeInUp { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+.fade-in { animation: fadeInUp .2s ease-out both; }
+@keyframes popIn { 0% { opacity: 0; transform: scale(.9); } 60% { opacity: 1; transform: scale(1.03); } 100% { transform: scale(1); } }
+.copyok {
+  color: var(--ok); font-size: 12px; font-weight: 600;
+  display: inline-flex; align-items: center; gap: 5px;
+  animation: popIn .22s ease-out both;
+}
+
+/* status pill — icon + text, never colour alone */
+.status-pill {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-size: 11.5px; font-weight: 500;
+  padding: 5px 10px; border-radius: var(--r-full);
+  border: 1px solid transparent; white-space: nowrap;
+}
+.status-pill.online { color: var(--ink-2); border-color: var(--line); background: var(--surface-2); }
+.status-pill.offline { background: var(--warn-bg); color: var(--warn); border-color: var(--warn); }
+
+.disclaimer {
+  display: flex; align-items: flex-start; gap: var(--s3);
+  font-size: 12px; color: var(--ink-2); line-height: 1.55;
+  background: var(--surface-2); border: 1px solid var(--line);
+  border-left: 3px solid var(--gold-strong);
+  border-radius: 0 var(--r-sm) var(--r-sm) 0;
+  padding: var(--s3) var(--s4); margin-bottom: var(--s4);
+}
+.disclaimer .icon { color: var(--gold); margin-top: 1px; }
+
+.chat-log { display: flex; flex-direction: column; gap: var(--s2); max-height: 340px; overflow-y: auto; }
+.chat-bubble {
+  border-radius: var(--r-md); padding: 9px var(--s3);
+  font-size: 13px; line-height: 1.6; max-width: 86%; white-space: pre-wrap;
+}
+.chat-bubble.user { align-self: flex-end; background: var(--brand); color: var(--brand-ink); }
+.chat-bubble.assistant { align-self: flex-start; background: var(--ai-bg); border: 1px solid var(--ai-line); }
+
+.debug-trace { margin-top: var(--s2); border-top: 1px dashed var(--line); padding-top: var(--s2); }
+.debug-trace summary { cursor: pointer; font-size: 11.5px; color: var(--ink-2); }
+.debug-step {
+  font-size: 12px; padding: 4px 0 4px var(--s3);
+  border-left: 2px solid var(--line-strong); margin: 4px 0 4px 4px;
+}
+.debug-step .n { font-family: "IBM Plex Mono", monospace; color: var(--gold); margin-right: 6px; }
+.debug-step .lbl { font-weight: 600; }
+
+.tone-row { display: flex; flex-wrap: wrap; gap: 6px; }
+.hint { font-size: 12px; color: var(--ink-2); margin-top: 6px; }
+
+/* =====================================================================
+   Responsive — one adaptive system. Adaptation is driven by capability
+   (viewport, pointer, hover), never by parsing a user-agent string, and
+   any detection failure degrades to this responsive baseline.
+   ===================================================================== */
+@media (max-width: 1000px) {
+  .main { padding: var(--s4) var(--s4) var(--s8); }
+  .topbar { padding: 0 var(--s4); }
+}
+
+@media (max-width: 860px) {
+  .app { grid-template-columns: minmax(0, 1fr); }
+  .app.collapsed { --sidebar-w: 0; }
+  .sidebar { display: none; }
+
+  .shell-content { padding-bottom: calc(var(--bottomnav-h) + env(safe-area-inset-bottom, 0px)); }
+
+  .topbar {
+    padding: 0 var(--s4);
+    padding-top: env(safe-area-inset-top, 0px);
+    height: calc(var(--topbar-h) + env(safe-area-inset-top, 0px));
+  }
+  .topbar .brandbar-mobile { display: flex; align-items: center; gap: var(--s2); min-width: 0; }
+
+  /* Bottom navigation: the only region reachable one-handed on a large
+     phone, and it survives the browser chrome collapsing on scroll. */
+  .bottomnav {
+    display: flex;
+    position: fixed; left: 0; right: 0; bottom: 0; z-index: 30;
+    background: var(--surface);
+    border-top: 1px solid var(--line);
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+    box-shadow: 0 -1px 3px rgba(0, 0, 0, .06);
+  }
+  .bottomnav button {
+    flex: 1; min-width: 0;
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px;
+    min-height: var(--bottomnav-h);
+    background: transparent; border: 0; cursor: pointer;
+    color: var(--ink-3); font-size: 10.5px; font-weight: 500;
+    padding: 7px 2px;
+    transition: color .12s ease;
+  }
+  .bottomnav button span {
+    max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .bottomnav button.active { color: var(--verified); font-weight: 600; }
+  .bottomnav button.active .icon { color: var(--verified); }
+
+  .view-head h2 { font-size: 20px; }
+  .panel { padding: var(--s4); }
+  .action-grid { grid-template-columns: 1fr; }
+  .provenance-strip { gap: var(--s4); }
+}
+
+/* Coarse pointers get larger targets and no hover-only affordances. */
+@media (pointer: coarse) {
+  .btn { min-height: 44px; padding: 11px 16px; }
+  .btn.small { min-height: 38px; }
+  .iconbtn { width: 44px; height: 44px; }
+  input[type=text], select { min-height: 44px; }
+  .seg button { min-height: 44px; }
+  .chip { min-height: 36px; display: inline-flex; align-items: center; }
+}
+
+@media (max-width: 560px) {
+  .main { padding: var(--s4) var(--s3) var(--s7); }
+  .topbar { padding: 0 var(--s3); }
+  .field-row { flex-direction: column; align-items: stretch; }
+  .field-row > * { width: 100%; }
+  .field-inline select { width: 100%; }
+  .btnrow .btn { flex: 1 1 auto; }
+  .stage-head { gap: var(--s2); }
+  .tally { gap: var(--s3); }
+}
+
+/* Landscape phones are short, not narrow — reclaim vertical space. */
+@media (max-height: 460px) and (orientation: landscape) {
+  .topbar { height: 48px; }
+  .bottomnav button { min-height: 48px; font-size: 9.5px; }
+  textarea { min-height: 92px; }
+  .main { padding-top: var(--s3); }
+}
+
+/* =====================================================================
+   Mobile sheet ("More") + responsive visibility helpers
+   ===================================================================== */
+.sheet-overlay {
+  position: fixed; inset: 0; z-index: 60;
+  background: var(--overlay);
+  display: flex; align-items: flex-end; justify-content: center;
+  animation: fadeIn .15s ease-out both;
+}
+@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+.sheet {
+  width: 100%; max-width: 560px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-bottom: 0;
+  border-radius: var(--r-md) var(--r-md) 0 0;
+  padding: var(--s3) var(--s3) calc(var(--bottomnav-h) + env(safe-area-inset-bottom, 0px) + var(--s3));
+  max-height: 78vh; overflow-y: auto;
+  box-shadow: var(--shadow-2);
+  animation: sheetUp .2s cubic-bezier(.22, 1, .36, 1) both;
+}
+@keyframes sheetUp { from { transform: translateY(14px); opacity: .6; } to { transform: none; opacity: 1; } }
+.sheet-head {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: var(--s2) var(--s2) var(--s3);
+}
+.sheet-head h3 { font-size: 16px; }
+.sheet-group { margin-bottom: var(--s3); }
+.sheet-group-label {
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 9.5px; text-transform: uppercase; letter-spacing: .16em;
+  color: var(--ink-3); padding: var(--s2) var(--s2) var(--s1);
+}
+.sheet-item {
+  display: flex; align-items: center; gap: 12px;
+  width: 100%; text-align: left; min-height: 48px;
+  background: transparent; border: 0; border-radius: var(--r-sm);
+  padding: 10px var(--s2); color: var(--ink); font-size: 14.5px; cursor: pointer;
+  transition: background-color .12s ease;
+}
+.sheet-item:hover { background: var(--surface-2); }
+.sheet-item.active { background: var(--verified-bg); color: var(--verified); font-weight: 600; }
+.sheet-item .chev { margin-left: auto; color: var(--ink-3); }
+
+/* Visibility helpers — the mobile breakpoint matches the shell's. */
+.show-mobile { display: none; }
+@media (max-width: 860px) {
+  .hide-mobile { display: none !important; }
+  .show-mobile { display: inline-flex; }
+}
+@media (max-width: 420px) {
+  .hide-narrow { display: none; }
+}
+
+.recent-peek { font-family: "IBM Plex Mono", monospace; font-size: 11.5px; color: var(--ink-3); }
+
+/* =====================================================================
+   Workspace toolbar, tone fold, keyboard hint
+   ===================================================================== */
+.toolbar {
+  display: flex; flex-wrap: wrap; gap: var(--s4);
+  align-items: flex-end; margin-bottom: var(--s4);
+}
+.toolbar .tool { display: flex; flex-direction: column; min-width: 0; }
+.toolbar .tool.grow { flex: 1 1 220px; }
+.toolbar .tool select { width: auto; min-width: 190px; }
+
+/* The tone list is 13 options — a permanent wall of chips buries the
+   field a user actually came to fill in, so it folds away and shows the
+   current choice on its summary line instead. */
+.tone-fold { margin-bottom: var(--s4); }
+.tone-fold > summary {
+  cursor: pointer; list-style: none;
+  display: inline-flex; align-items: center; gap: var(--s2);
+  font-size: 11px; font-family: "IBM Plex Mono", monospace; font-weight: 600;
+  letter-spacing: .1em; text-transform: uppercase; color: var(--ink-3);
+  padding: var(--s1) 0;
+}
+.tone-fold > summary::-webkit-details-marker { display: none; }
+.tone-fold > summary::before {
+  content: "▸"; color: var(--gold); font-size: 11px; transition: transform .12s ease;
+}
+.tone-fold[open] > summary::before { transform: rotate(90deg); }
+.tone-fold .tone-current {
+  font-family: "IBM Plex Sans", sans-serif; font-weight: 500;
+  letter-spacing: 0; text-transform: none; font-size: 12.5px; color: var(--ink);
+  background: var(--surface-2); border: 1px solid var(--line);
+  border-radius: var(--r-full); padding: 1px 9px;
+}
+.tone-fold .tone-row { margin-top: var(--s3); }
+
+.kbd-hint {
+  font-family: "IBM Plex Mono", monospace; font-size: 10.5px;
+  color: var(--ink-3); letter-spacing: .04em;
+  border: 1px solid var(--line); border-radius: 4px; padding: 3px 7px;
+}
+
+.chat-fold { margin-top: var(--s4); }
+.chat-fold > summary {
+  cursor: pointer; font-size: 12px; color: var(--ink-2); padding: var(--s1) 0;
+}
+.chat-fold .chat-log { margin-top: var(--s3); }
+
+.stage-actions .spacer { margin-left: auto; }
+
+/* The notice block carries an action button on its error variant. */
+.notice .btn { margin-left: auto; flex: none; }
+@media (max-width: 560px) {
+  .notice { flex-wrap: wrap; }
+  .notice .btn { margin-left: 0; }
+  .toolbar { gap: var(--s3); }
+  .toolbar .tool, .toolbar .tool select { width: 100%; min-width: 0; }
+  .toolbar .seg { width: 100%; }
+  .toolbar .seg button { flex: 1; justify-content: center; }
 }

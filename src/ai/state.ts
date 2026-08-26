@@ -67,6 +67,19 @@
  * both clear `error` (see AIWritingAssistant's mount effect), since a stale
  * error from a previous visit is exactly the kind of transient state that
  * should not persist.
+ *
+ * loadedHistoryRecordId (Phase 1.5 Part 1) tracks which saved message-history
+ * record, if any, the current session is "open" on — the thing that decides
+ * whether "Save to History" behaves as Update Existing (same record) or
+ * Save as New. It is set by LOAD_HISTORY_RECORD (Open/Edit from history) and
+ * by SET_LOADED_HISTORY_RECORD_ID (right after a Save-as-New, so a further
+ * save on the same session now defaults to updating that new record). It is
+ * cleared by SET_ORIGINAL and RESET — "starting a fresh regeneration" from a
+ * new original/topic is a new derivation, not an edit of the previously
+ * loaded record — but deliberately survives everything else (editing the AI
+ * draft, running/re-running the JSSDM engine, editing the final result,
+ * follow-up refinements, Send to AI) since those are all still working on
+ * the SAME loaded record, matching how a saved record is actually reused.
  */
 import type { ChatMessage } from "./client.ts";
 import type { AssistantMode } from "./prompts.ts";
@@ -91,6 +104,7 @@ export interface AssistantState {
   chat: ChatMessage[];
   loading: boolean;
   error: string | null;
+  loadedHistoryRecordId: string | null;
 }
 
 export const initialAssistantState: AssistantState = {
@@ -110,6 +124,7 @@ export const initialAssistantState: AssistantState = {
   chat: [],
   loading: false,
   error: null,
+  loadedHistoryRecordId: null,
 };
 
 export type AssistantAction =
@@ -129,7 +144,18 @@ export type AssistantAction =
   | { type: "JSSDM_GENERATED"; text: string; spans: Span[] }
   | { type: "SET_FINAL_EDITED"; text: string }
   | { type: "CLEAR_ERROR" }
-  | { type: "RESET" };
+  | { type: "RESET" }
+  | {
+      type: "LOAD_HISTORY_RECORD";
+      recordId: string;
+      outputMode: OutputMode;
+      original: string;
+      aiFinal: string;
+      aiEditedDraft: string;
+      jssdmGenerated: string | null;
+      finalEdited: string | null;
+    }
+  | { type: "SET_LOADED_HISTORY_RECORD_ID"; recordId: string | null };
 
 export function assistantReducer(state: AssistantState, action: AssistantAction): AssistantState {
   switch (action.type) {
@@ -148,7 +174,11 @@ export function assistantReducer(state: AssistantState, action: AssistantAction)
     case "SET_FOLLOWUP_INPUT":
       return { ...state, followupInput: action.text };
     case "SET_ORIGINAL":
-      return { ...state, original: action.text };
+      // A fresh Generate/Check & Polish from a new top-box draft is "starting
+      // a fresh regeneration" — a new derivation, not an edit of whatever
+      // history record was previously loaded (Part 1's loadedHistoryRecordId
+      // rule; see the header comment).
+      return { ...state, original: action.text, loadedHistoryRecordId: null };
     case "REQUEST_START":
       return { ...state, loading: true, error: null };
     case "REQUEST_SUCCESS": {
@@ -203,7 +233,8 @@ export function assistantReducer(state: AssistantState, action: AssistantAction)
       // Settings-like fields (mode, tone/customTone, outputMode, signature) are
       // preserved across a reset — they're user preferences, not session
       // content. Everything that represents actual drafted text/conversation
-      // is cleared.
+      // is cleared — including loadedHistoryRecordId: a Reset starts a
+      // wholly fresh session, not an edit of whatever record was open.
       return {
         ...initialAssistantState,
         mode: state.mode,
@@ -212,6 +243,37 @@ export function assistantReducer(state: AssistantState, action: AssistantAction)
         outputMode: state.outputMode,
         signature: state.signature,
       };
+    case "LOAD_HISTORY_RECORD":
+      // "Open / Edit" from the message-history page — replaces the entire
+      // live pipeline with the saved record's fields (see
+      // ai/messageHistory.ts's pipelineFromRecord, the inverse of this) and
+      // marks this record as the one now "open," so a subsequent save
+      // defaults to Update Existing rather than creating a duplicate.
+      // jssdmGeneratedSpans is not persisted (a regenerable display
+      // artifact, see messageHistory.ts) — it comes back empty; clicking
+      // Re-abbreviate/De-abbreviate regenerates real spans if needed. The
+      // chat log is reseeded with a single reconstructed turn (rather than
+      // left empty) so a "Refine further" follow-up on a reopened record
+      // still has the request/response context it needs — the full
+      // multi-turn conversation isn't persisted, only the final AI turn.
+      return {
+        ...state,
+        loadedHistoryRecordId: action.recordId,
+        outputMode: action.outputMode,
+        original: action.original,
+        aiFinal: action.aiFinal,
+        aiEditedDraft: action.aiEditedDraft,
+        jssdmGenerated: action.jssdmGenerated,
+        jssdmGeneratedSpans: [],
+        finalEdited: action.finalEdited,
+        chat: [
+          { role: "user", content: action.original },
+          { role: "assistant", content: action.aiFinal },
+        ],
+        error: null,
+      };
+    case "SET_LOADED_HISTORY_RECORD_ID":
+      return { ...state, loadedHistoryRecordId: action.recordId };
     default:
       return state;
   }

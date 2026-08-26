@@ -51,7 +51,15 @@ export interface Entry {
   originalEntry?: { full: string; abbr: string };
   quantity?: string;
   symbol?: string;
-  tier?: number;
+  /** Present on every "Rank"-category entry (56/56, confirmed against the
+   *  dataset) — which personnel category the rank belongs to: "Officer",
+   *  "Other Ranks", "Sailor", or "Airmen". Was mistyped as `number`; the
+   *  dataset actually stores one of these strings. No other category uses
+   *  this field, which is what makes `category === "Rank"` (backed by a
+   *  real tier) a reliable, generic signal for the same-force Rank-priority
+   *  tie-break in database.ts (see the comment there — the "Sepoy"
+   *  ambiguity fix). */
+  tier?: string;
 }
 
 export interface Rule {

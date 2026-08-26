@@ -6,14 +6,13 @@
 [functions]
   node_bundler = "esbuild"
 
-# Explicit passthrough so the SPA fallback below never shadows the function
-# route (Netlify normally resolves /.netlify/functions/* before user
-# redirects anyway, but this makes the intent explicit rather than relying
-# on implicit ordering).
-[[redirects]]
-  from = "/.netlify/functions/*"
-  to = "/.netlify/functions/:splat"
-  status = 200
+# NOTE: an earlier explicit passthrough redirect for "/.netlify/functions/*"
+# was removed here — current Netlify CLI rejects any redirect "from" path
+# under the reserved "/.netlify/" namespace ("path field must not start
+# with /.netlify"), which surfaced as a harmless-but-noisy parse warning on
+# every `netlify dev`/deploy. It was always redundant anyway (see the SPA
+# fallback below's comment): Netlify resolves /.netlify/functions/* before
+# user redirects regardless, with or without this rule.
 
 # Client-side router fallback (the app is a single page; all internal
 # navigation is in-memory state, not real routes, but this keeps a direct

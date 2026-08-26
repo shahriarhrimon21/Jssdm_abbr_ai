@@ -6,7 +6,11 @@ import { callAI, type ChatMessage } from "../ai/client.ts";
 import { runAbbreviate } from "../jssdm/abbreviationEngine.ts";
 import { runDeabbreviate } from "../jssdm/deabbreviationEngine.ts";
 import HighlightedText from "../components/HighlightedText.tsx";
-import ForceSelect from "../components/ForceSelect.tsx";
+import Icon from "../components/Icon.tsx";
+import Tooltip from "../components/Tooltip.tsx";
+import { useOnlineStatus } from "../hooks/useOnlineStatus.ts";
+import { addNewMessageHistoryRecord, updateMessageHistoryRecord, type PipelineSnapshot } from "../ai/messageHistory.ts";
+import type { ViewId } from "../nav.ts";
 
 // §B10/B13: a hung network request must not leave the UI stuck in
 // "Working..." forever, and a fast-changing user (new request fired before
@@ -36,35 +40,60 @@ function storeProvider(id: string): void {
   }
 }
 
+/** One line of preview for a collapsed reference stage. */
+function peek(text: string | null): string {
+  if (!text) return "";
+  const flat = text.replace(/\s+/g, " ").trim();
+  return flat.length > 96 ? flat.slice(0, 96) + "…" : flat;
+}
+
 /**
- * `state`/`dispatch` are owned by App.tsx (see src/ai/state.ts's top comment
- * for why) — this component reads and dispatches into that shared session
- * instead of holding its own useReducer/useState for anything that needs to
- * survive navigating away from this page. Only genuinely transient,
- * per-mount UI state (the "Copied." flash, and the AI provider choice which
- * is already durably persisted via localStorage) stays local.
+ * The five-stage workspace.
  *
- * Editing pipeline (see state.ts's header comment for the full rationale):
- * AI result and JSSDM result are both editable text areas, never read-only
- * dead ends. "Send to Abbreviation" always reads the *edited* AI draft.
- * "Copy" always copies the *edited* final text. Nothing re-runs the engine
- * automatically just because the user typed in the final box — only the
- * explicit Re-abbreviate / De-abbreviate buttons do that.
+ * `state`/`dispatch` are owned by App.tsx (see src/ai/state.ts's top
+ * comment for why) — this component reads and dispatches into that shared
+ * session rather than holding its own reducer for anything that must
+ * survive navigating away. Only genuinely transient UI state (the
+ * "Copied." flash, which reference stages are expanded, the provider
+ * choice which is separately persisted) stays local.
+ *
+ * Phase 2 presentation rules applied here, none of which change behaviour:
+ *
+ *  - Progressive disclosure. Stages appear as they are reached, so a
+ *    first-time user sees one input and one button rather than five
+ *    panels. The two untouched reference copies — the raw AI response and
+ *    the engine's own output — collapse to a summary line, since they are
+ *    only needed when something looks wrong.
+ *  - Provenance. Editable AI stages carry the cyan AI treatment; engine
+ *    stages carry the green verified treatment; each is labelled in words
+ *    as well as colour.
+ *  - Force is gone from this page. It is global in the top bar now, so a
+ *    user cannot set two contradictory values on two screens.
+ *
+ * Frozen behaviour preserved exactly: editing a box never re-runs the
+ * engine; "Send to Abbreviation" always reads the *edited* AI draft, never
+ * the raw response; Copy and Save always read the *edited* final text.
  */
 export default function AIWritingAssistant({
   force,
-  setForce,
   state,
   dispatch,
+  setView,
 }: {
   force: string;
-  setForce: (f: string) => void;
+  setForce?: (f: string) => void;
   state: AssistantState;
   dispatch: Dispatch<AssistantAction>;
+  setView?: (v: ViewId) => void;
 }) {
   const [copiedAI, setCopiedAI] = useState(false);
   const [copiedFinal, setCopiedFinal] = useState(false);
   const [provider, setProvider] = useState(loadStoredProvider);
+  const [saveNote, setSaveNote] = useState<string | null>(null);
+  const [showOriginal, setShowOriginal] = useState(false);
+  const [showRawAI, setShowRawAI] = useState(false);
+  const [showEngine, setShowEngine] = useState(false);
+  const online = useOnlineStatus();
 
   const requestSeqRef = useRef(0);
   const abortRef = useRef<AbortController | null>(null);
@@ -101,8 +130,7 @@ export default function AIWritingAssistant({
   }
 
   // Shared by every path that actually calls the AI (initial Generate/Check
-  // & Polish, a typed follow-up, and now "Send to AI →" on the final result
-  // — see sendFinalToAI() below for why that one needed fixing at all).
+  // & Polish, a typed follow-up, and "Send to AI →" on the final result).
   // Sets up its own AbortController + timeout + request-id guard each time
   // it runs, so a slow/hung request can never silently overwrite a newer
   // one and never leaves the button stuck showing "Working..." forever.
@@ -187,17 +215,9 @@ export default function AIWritingAssistant({
     dispatch({ type: "JSSDM_GENERATED", text: r.output, spans: r.outSpans });
   }
 
-  // ROOT-CAUSE FIX (Phase 2 Priority 0): this button is labeled "Send to AI"
-  // but previously did not call the AI at all — it only copied the current
-  // final-edited text back into the (already-scrolled-past) draft input box
-  // with no loading state, no result, and no visible feedback of any kind,
-  // which is exactly what a user would experience as "Send to AI is not
-  // working." It now actually sends the current final-edited text to the AI
-  // as a follow-up turn in the existing conversation (same pipeline as the
-  // "Refine further" box), without discarding anything already in this
-  // session — the previous chat history, AI draft, and JSSDM result all
-  // remain exactly as they were unless/until this new response replaces
-  // aiFinal/aiEditedDraft on success (see REQUEST_SUCCESS in ai/state.ts).
+  // Sends the current final-edited text to the AI as a follow-up turn in the
+  // existing conversation, without discarding anything already in this
+  // session.
   function sendFinalToAI() {
     if (!state.finalEdited) return;
     runAIRequest(state.finalEdited, state.chat);
@@ -210,51 +230,158 @@ export default function AIWritingAssistant({
     });
   }
 
+  // "Save to History" always saves what the user has actually finalized
+  // right now — messageHistory.ts's buildPipelineFields resolves
+  // finalMessage as finalEdited ?? aiEditedDraft ?? aiFinal, so a save here
+  // can never capture a stale AI/engine result the user has since edited
+  // past, regardless of which pipeline stage they've reached.
+  function currentSnapshot(): PipelineSnapshot | null {
+    if (!state.aiFinal) return null;
+    return {
+      messageType: state.outputMode,
+      original: state.original,
+      aiFinal: state.aiFinal,
+      aiEditedDraft: state.aiEditedDraft,
+      jssdmGenerated: state.jssdmGenerated,
+      finalEdited: state.finalEdited,
+    };
+  }
+
+  function saveAsNew() {
+    const snapshot = currentSnapshot();
+    if (!snapshot) return;
+    const record = addNewMessageHistoryRecord(snapshot);
+    dispatch({ type: "SET_LOADED_HISTORY_RECORD_ID", recordId: record.id });
+    setSaveNote("Saved as a new history record.");
+    setTimeout(() => setSaveNote(null), 2000);
+  }
+
+  function updateExisting() {
+    const snapshot = currentSnapshot();
+    if (!snapshot || !state.loadedHistoryRecordId) return;
+    const updated = updateMessageHistoryRecord(state.loadedHistoryRecordId, snapshot);
+    if (!updated) {
+      // The loaded record was deleted (or history was cleared) elsewhere
+      // since it was opened — Update Existing must never silently create a
+      // substitute record, so this is surfaced instead of papered over.
+      dispatch({ type: "SET_LOADED_HISTORY_RECORD_ID", recordId: null });
+      setSaveNote("That record no longer exists — use Save as New instead.");
+      setTimeout(() => setSaveNote(null), 3000);
+      return;
+    }
+    setSaveNote("History record updated.");
+    setTimeout(() => setSaveNote(null), 2000);
+  }
+
   const isWhatsapp = state.outputMode === "whatsapp";
+  const hasResult = state.aiFinal !== null;
+  const hasEngineRun = state.jssdmGenerated !== null;
+
+  const saveControls = (
+    <>
+      {state.loadedHistoryRecordId && (
+        <Tooltip label="Update the record you opened">
+          <button className="btn secondary small" onClick={updateExisting}>
+            <Icon name="save" size={15} />
+            Update Existing
+          </button>
+        </Tooltip>
+      )}
+      <Tooltip label="Keep this as a new record">
+        <button className="btn secondary small" onClick={saveAsNew}>
+          <Icon name="plus" size={15} />
+          Save as New
+        </button>
+      </Tooltip>
+      {saveNote && (
+        <span className="copyok">
+          <Icon name="check" size={14} />
+          {saveNote}
+        </span>
+      )}
+    </>
+  );
 
   return (
     <div>
       <div className="view-head">
         <div>
-          <h2>AI Writing Assistant</h2>
+          <h2>AI Assistant</h2>
           <div className="view-sub">
-            Helps with grammar, clarity and tone only — it never decides what's an authorized JSSDM abbreviation. Run its result through "JSSDM
-            Abbreviation" below to get a result grounded in the manual. Every result along the way is yours to edit — nothing here is ever
-            permanently read-only.
+            StaffAI helps with grammar, clarity and tone. It never decides what counts as an authorised abbreviation — that is settled by the
+            JSSDM engine when you send the draft on.
           </div>
         </div>
+        {setView && (
+          <button className="btn secondary small" onClick={() => setView("messageHistory")}>
+            <Icon name="history" size={15} />
+            History
+          </button>
+        )}
       </div>
 
       <div className="disclaimer">
-        The AI provider is called through this site's own server function — no API key is ever stored in your browser or sent to you. Abbreviation
-        correctness is still decided entirely by the deterministic JSSDM engine, not by the AI.
+        <Icon name="info" size={16} />
+        <span>
+          The AI provider is called through this site's own server function — no API key is ever stored in your browser. Abbreviation
+          correctness is decided entirely by the deterministic JSSDM engine, not by the AI.
+        </span>
       </div>
 
+      {!online && (
+        <div className="notice warn" role="status">
+          <Icon name="offline" size={16} />
+          <span>
+            <strong>You're offline.</strong> Drafting with StaffAI needs a connection. Abbreviation, validation, search and history all still
+            work.
+          </span>
+        </div>
+      )}
+
+      {/* ---------------- request panel ---------------- */}
       <div className="panel">
-        <div className="ai-toolbar">
-          <div>
+        <div className="toolbar">
+          <div className="tool">
             <label className="flabel">Output style</label>
-            <div className="ai-mode-toggle">
-              <button className={!isWhatsapp ? "active" : ""} onClick={() => dispatch({ type: "SET_OUTPUT_MODE", outputMode: "text" })}>
+            <div className="seg">
+              <button
+                className={!isWhatsapp ? "active" : ""}
+                onClick={() => dispatch({ type: "SET_OUTPUT_MODE", outputMode: "text" })}
+                aria-pressed={!isWhatsapp}
+              >
                 Text
               </button>
-              <button className={isWhatsapp ? "active" : ""} onClick={() => dispatch({ type: "SET_OUTPUT_MODE", outputMode: "whatsapp" })}>
+              <button
+                className={isWhatsapp ? "active" : ""}
+                onClick={() => dispatch({ type: "SET_OUTPUT_MODE", outputMode: "whatsapp" })}
+                aria-pressed={isWhatsapp}
+              >
                 WhatsApp
               </button>
             </div>
           </div>
-          <div>
+
+          <div className="tool">
             <label className="flabel">Operation</label>
-            <div className="ai-mode-toggle">
-              <button className={state.mode === "check" ? "active" : ""} onClick={() => dispatch({ type: "SET_MODE", mode: "check" })}>
+            <div className="seg">
+              <button
+                className={state.mode === "check" ? "active" : ""}
+                onClick={() => dispatch({ type: "SET_MODE", mode: "check" })}
+                aria-pressed={state.mode === "check"}
+              >
                 Check &amp; Polish
               </button>
-              <button className={state.mode === "generate" ? "active" : ""} onClick={() => dispatch({ type: "SET_MODE", mode: "generate" })}>
+              <button
+                className={state.mode === "generate" ? "active" : ""}
+                onClick={() => dispatch({ type: "SET_MODE", mode: "generate" })}
+                aria-pressed={state.mode === "generate"}
+              >
                 Generate
               </button>
             </div>
           </div>
-          <div>
+
+          <div className="tool">
             <label className="flabel" htmlFor="ai-provider">
               AI provider
             </label>
@@ -266,46 +393,49 @@ export default function AIWritingAssistant({
               ))}
             </select>
           </div>
-          <ForceSelect value={force} onChange={setForce} />
+
+          {isWhatsapp && (
+            <div className="tool grow">
+              <label className="flabel" htmlFor="ai-signature">
+                Your signature — optional, never invented
+              </label>
+              <input
+                id="ai-signature"
+                type="text"
+                placeholder='e.g. "Maj Rahman"'
+                value={state.signature}
+                onChange={(e) => dispatch({ type: "SET_SIGNATURE", signature: e.target.value })}
+              />
+            </div>
+          )}
         </div>
 
-        {isWhatsapp && (
-          <div style={{ marginBottom: 10 }}>
-            <label className="flabel" htmlFor="ai-signature">
-              Your signature (optional — used only if you provide it; never invented)
-            </label>
-            <input
-              id="ai-signature"
-              type="text"
-              placeholder='e.g. "BM" or "Maj Hemel"'
-              value={state.signature}
-              onChange={(e) => dispatch({ type: "SET_SIGNATURE", signature: e.target.value })}
-              style={{ maxWidth: 260 }}
-            />
+        <details className="tone-fold">
+          <summary>
+            Tone <span className="tone-current">{state.tone}</span>
+          </summary>
+          <div className="tone-row">
+            {TONES.map((t) => (
+              <button
+                key={t}
+                className={"chip" + (state.tone === t ? " active" : "")}
+                onClick={() => dispatch({ type: "SET_TONE", tone: t })}
+                aria-pressed={state.tone === t}
+              >
+                {t}
+              </button>
+            ))}
           </div>
-        )}
-
-        <label className="flabel">Tone / expression</label>
-        <div className="tone-row">
-          {TONES.map((t) => (
-            <button
-              key={t}
-              className={"chip" + (state.tone === t ? " active" : "")}
-              onClick={() => dispatch({ type: "SET_TONE", tone: t })}
-            >
-              {t}
-            </button>
-          ))}
-        </div>
-        {state.tone === "Custom" && (
-          <input
-            type="text"
-            placeholder="Describe the tone you want..."
-            value={state.customTone}
-            onChange={(e) => dispatch({ type: "SET_CUSTOM_TONE", customTone: e.target.value })}
-            style={{ marginBottom: 10 }}
-          />
-        )}
+          {state.tone === "Custom" && (
+            <input
+              type="text"
+              placeholder="Describe the tone you want..."
+              value={state.customTone}
+              onChange={(e) => dispatch({ type: "SET_CUSTOM_TONE", customTone: e.target.value })}
+              style={{ marginTop: 10 }}
+            />
+          )}
+        </details>
 
         <label className="flabel" htmlFor="ai-draft">
           {state.mode === "check" ? "Text to check & polish" : "Describe what you want written"}
@@ -314,156 +444,271 @@ export default function AIWritingAssistant({
           id="ai-draft"
           value={state.draftInput}
           onChange={(e) => dispatch({ type: "SET_DRAFT_INPUT", text: e.target.value })}
+          onKeyDown={(e) => {
+            // Ctrl/Cmd+Enter submits — the standard shortcut for a
+            // multi-line field, and it never intercepts a bare Enter,
+            // which must still insert a newline.
+            if ((e.ctrlKey || e.metaKey) && e.key === "Enter") runInitial();
+          }}
           placeholder={
             state.mode === "check"
-              ? "Paste your draft..."
+              ? "Paste your draft…"
               : isWhatsapp
                 ? "e.g. Inform Sir that I have taken move from my present unit and will join the new unit on 02 September."
-                : "e.g. A short memo requesting additional troop..."
+                : "e.g. A short memo requesting additional troop…"
           }
         />
-        <div className="btnrow" style={{ marginTop: 10 }} aria-busy={state.loading}>
+        <div className="btnrow" style={{ marginTop: 12 }} aria-busy={state.loading}>
           <button className="btn" onClick={runInitial} disabled={state.loading || !state.draftInput.trim()}>
-            {state.loading && <span className="spinner" aria-hidden="true" />}
-            {state.loading ? "Working..." : state.mode === "check" ? "Check & Polish" : "Generate"}
+            {state.loading ? <span className="spinner" aria-hidden="true" /> : <Icon name="ai" size={16} />}
+            {state.loading ? "StaffAI is working…" : state.mode === "check" ? "Check & Polish" : "Generate"}
           </button>
           {state.loading && (
             <button className="btn secondary small" onClick={stopAIRequest}>
+              <Icon name="stop" size={15} />
               Stop
             </button>
           )}
+          <span className="kbd-hint hide-mobile">Ctrl + Enter</span>
         </div>
-        {/* Once a first AI result exists, a later error is shown next to the
-            action that actually failed (down near Send to AI / follow-up)
-            instead of repeated here too. */}
-        {state.error && !state.aiFinal && (
-          <div className="result-block bad fade-in" style={{ marginTop: 10 }} role="alert">
-            {state.error}{" "}
-            <button
-              className="btn secondary small"
-              style={{ marginLeft: 8 }}
-              onClick={() => (retryRef.current ? retryRef.current() : runInitial())}
-            >
-              Retry
+
+        {state.error && !hasResult && (
+          <div className="notice bad fade-in" style={{ marginTop: 12, marginBottom: 0 }} role="alert">
+            <Icon name="error" size={16} />
+            <span>{state.error}</span>
+            <button className="btn secondary small" onClick={() => (retryRef.current ? retryRef.current() : runInitial())}>
+              <Icon name="refresh" size={14} />
+              Try again
             </button>
           </div>
         )}
       </div>
 
-      {state.aiFinal && (
-        <div className="panel fade-in">
-          <div className="text-state-col">
-            <h4>Original (never changed)</h4>
-          </div>
-          <div className="text-block" style={{ marginBottom: 14 }}>
-            {state.original}
-          </div>
+      {/* ---------------- loading skeleton ---------------- */}
+      {state.loading && !hasResult && (
+        <div className="panel fade-in" aria-hidden="true">
+          <div className="skeleton skeleton-line" style={{ width: "34%", height: 10 }} />
+          <div className="skeleton skeleton-line" />
+          <div className="skeleton skeleton-line" />
+          <div className="skeleton skeleton-line" />
+        </div>
+      )}
 
-          <div className="text-state-col">
-            <h4>AI Result (editable — this is what gets sent to Abbreviation)</h4>
-          </div>
-          <textarea
-            id="ai-edited-draft"
-            value={state.aiEditedDraft ?? ""}
-            onChange={(e) => dispatch({ type: "SET_AI_EDITED_DRAFT", text: e.target.value })}
-            style={{ marginBottom: 8 }}
-          />
-          <div className="btnrow" style={{ marginBottom: 14 }}>
-            <button className="btn small" onClick={() => copy(state.aiEditedDraft || "", setCopiedAI)}>
-              Copy AI result
+      {/* ---------------- the pipeline ---------------- */}
+      {hasResult && (
+        <div className="fade-in">
+          {/* stage 1 — original, collapsed reference */}
+          {!showOriginal ? (
+            <button className="stage-collapsed" onClick={() => setShowOriginal(true)} aria-expanded={false}>
+              <Icon name="expand" size={15} />
+              <span>Original</span>
+              <span className="peek">{peek(state.original)}</span>
             </button>
-            {copiedAI && <span className="copyok">Copied.</span>}
-            <button className="btn secondary small" onClick={sendToAbbreviation}>
-              Send to Abbreviation →
+          ) : (
+            <div className="stage">
+              <div className="stage-head">
+                <h4>Original</h4>
+                <span className="stage-note">Exactly what you typed — never altered</span>
+                <span className="spacer" />
+                <button className="iconbtn" onClick={() => setShowOriginal(false)} aria-label="Collapse original">
+                  <Icon name="collapse" size={17} />
+                </button>
+              </div>
+              <div className="stage-body">
+                <div className="text-block">{state.original}</div>
+              </div>
+            </div>
+          )}
+
+          {/* stage 2 — raw AI response, collapsed reference */}
+          {!showRawAI ? (
+            <button className="stage-collapsed" onClick={() => setShowRawAI(true)} aria-expanded={false}>
+              <Icon name="expand" size={15} />
+              <span>AI response</span>
+              <span className="peek">{peek(state.aiFinal)}</span>
             </button>
-          </div>
-
-          {state.jssdmGenerated !== null && (
-            <>
-              <div className="text-state-col">
-                <h4>JSSDM Generated Result (reference — what the engine just produced)</h4>
+          ) : (
+            <div className="stage is-ai">
+              <div className="stage-head">
+                <span className="prov prov-ai">
+                  <Icon name="ai" size={12} />
+                  AI-assisted
+                </span>
+                <h4>AI response</h4>
+                <span className="stage-note">What the model returned, unedited</span>
+                <span className="spacer" />
+                <button className="iconbtn" onClick={() => setShowRawAI(false)} aria-label="Collapse AI response">
+                  <Icon name="collapse" size={17} />
+                </button>
               </div>
-              <HighlightedText text={state.jssdmGenerated} spans={state.jssdmGeneratedSpans} />
-
-              <div className="text-state-col" style={{ marginTop: 12 }}>
-                <h4>Final Edited Result (editable — this is what Copy copies)</h4>
+              <div className="stage-body">
+                <div className="text-block">{state.aiFinal}</div>
               </div>
+            </div>
+          )}
+
+          {/* stage 3 — editable AI draft */}
+          <div className="stage is-ai">
+            <div className="stage-head">
+              <span className="prov prov-ai">
+                <Icon name="ai" size={12} />
+                AI-assisted draft
+              </span>
+              <h4>Your draft</h4>
+              <span className="stage-note">Edit freely — this is what gets sent to the manual</span>
+            </div>
+            <div className="stage-body">
               <textarea
-                id="final-edited"
-                value={state.finalEdited ?? ""}
-                onChange={(e) => dispatch({ type: "SET_FINAL_EDITED", text: e.target.value })}
-                style={{ marginBottom: 8 }}
+                id="ai-edited-draft"
+                value={state.aiEditedDraft ?? ""}
+                onChange={(e) => dispatch({ type: "SET_AI_EDITED_DRAFT", text: e.target.value })}
+                aria-label="Editable AI draft"
               />
-              <div className="btnrow" style={{ marginTop: 10, flexWrap: "wrap" }}>
-                <button className="btn secondary small" onClick={reabbreviate}>
-                  Re-abbreviate
+            </div>
+            <div className="stage-actions">
+              <button className="btn gold" onClick={sendToAbbreviation}>
+                <Icon name="abbreviate" size={16} />
+                Send to Abbreviation
+              </button>
+              <button className="btn secondary small" onClick={() => copy(state.aiEditedDraft || "", setCopiedAI)}>
+                <Icon name={copiedAI ? "check" : "copy"} size={15} />
+                {copiedAI ? "Copied" : "Copy"}
+              </button>
+              {!hasEngineRun && saveControls}
+            </div>
+          </div>
+
+          {/* stage 4 — engine output, collapsed reference */}
+          {hasEngineRun &&
+            (!showEngine ? (
+              <button className="stage-collapsed" onClick={() => setShowEngine(true)} aria-expanded={false}>
+                <Icon name="expand" size={15} />
+                <span>Engine output</span>
+                <span className="peek">{peek(state.jssdmGenerated)}</span>
+              </button>
+            ) : (
+              <div className="stage is-verified">
+                <div className="stage-head">
+                  <span className="prov prov-verified">
+                    <Icon name="verified" size={12} />
+                    JSSDM 2022
+                  </span>
+                  <h4>Engine output</h4>
+                  <span className="stage-note">What the manual produced, with sources</span>
+                  <span className="spacer" />
+                  <button className="iconbtn" onClick={() => setShowEngine(false)} aria-label="Collapse engine output">
+                    <Icon name="collapse" size={17} />
+                  </button>
+                </div>
+                <div className="stage-body">
+                  <HighlightedText text={state.jssdmGenerated!} spans={state.jssdmGeneratedSpans} />
+                  <p className="hint">
+                    Underlined terms are traceable to the manual. Select or tap one to see its source. Terms not in the manual are left
+                    unchanged.
+                  </p>
+                </div>
+              </div>
+            ))}
+
+          {/* stage 5 — the authoritative final text */}
+          {hasEngineRun && (
+            <div className="stage is-verified">
+              <div className="stage-head">
+                <span className="prov prov-verified">
+                  <Icon name="verified" size={12} />
+                  Checked against JSSDM 2022
+                </span>
+                <h4>Final message</h4>
+                <span className="stage-note">This is what Copy and Save use</span>
+              </div>
+              <div className="stage-body">
+                <textarea
+                  id="final-edited"
+                  value={state.finalEdited ?? ""}
+                  onChange={(e) => dispatch({ type: "SET_FINAL_EDITED", text: e.target.value })}
+                  aria-label="Final editable message"
+                />
+              </div>
+              <div className="stage-actions">
+                <button className="btn" onClick={() => copy(state.finalEdited || "", setCopiedFinal)}>
+                  <Icon name={copiedFinal ? "check" : "copy"} size={16} />
+                  {copiedFinal ? "Copied" : "Copy message"}
                 </button>
-                <button className="btn secondary small" onClick={deabbreviateFinal}>
-                  De-abbreviate
-                </button>
-                <button className="btn small" onClick={() => copy(state.finalEdited || "", setCopiedFinal)}>
-                  Copy
-                </button>
-                {copiedFinal && <span className="copyok">Copied.</span>}
-                <button className="btn secondary small" onClick={sendFinalToAI} disabled={state.loading || !state.finalEdited}>
-                  {state.loading && <span className="spinner" aria-hidden="true" />}
-                  {state.loading ? "Sending to AI..." : "Send to AI →"}
-                </button>
+                {saveControls}
+                <span className="spacer" />
+                <Tooltip label="Run the engine again">
+                  <button className="btn ghost small" onClick={reabbreviate}>
+                    <Icon name="abbreviate" size={15} />
+                    Re-abbreviate
+                  </button>
+                </Tooltip>
+                <Tooltip label="Expand back to full forms">
+                  <button className="btn ghost small" onClick={deabbreviateFinal}>
+                    <Icon name="deabbreviate" size={15} />
+                    De-abbreviate
+                  </button>
+                </Tooltip>
+                <Tooltip label="Ask StaffAI to revise this">
+                  <button className="btn ghost small" onClick={sendFinalToAI} disabled={state.loading || !state.finalEdited}>
+                    {state.loading ? <span className="spinner" aria-hidden="true" /> : <Icon name="ai" size={15} />}
+                    {state.loading ? "Sending…" : "Send to AI"}
+                  </button>
+                </Tooltip>
                 {state.loading && (
-                  <button className="btn secondary small" onClick={stopAIRequest}>
+                  <button className="btn ghost small" onClick={stopAIRequest}>
+                    <Icon name="stop" size={15} />
                     Stop
                   </button>
                 )}
               </div>
-            </>
+            </div>
           )}
 
-          {/* Covers a failure from Send to AI or a follow-up message — shown
-              here (once an AI result already exists) rather than only up in
-              the initial-request panel, since that panel is usually
-              scrolled out of view by the time the user reaches this point. */}
           {state.error && (
-            <div className="result-block bad fade-in" style={{ marginTop: 10 }} role="alert">
-              {state.error}{" "}
-              <button
-                className="btn secondary small"
-                style={{ marginLeft: 8 }}
-                onClick={() => retryRef.current?.()}
-              >
-                Retry
+            <div className="notice bad fade-in" role="alert">
+              <Icon name="error" size={16} />
+              <span>{state.error}</span>
+              <button className="btn secondary small" onClick={() => retryRef.current?.()}>
+                <Icon name="refresh" size={14} />
+                Try again
               </button>
             </div>
           )}
 
-          {state.chat.length > 0 && (
-            <div className="chat-log" style={{ marginTop: 16 }} role="log" aria-label="Conversation with the AI">
-              {state.chat.map((m, i) => (
-                <div key={i} className={`chat-bubble ${m.role}`}>
-                  {m.content}
+          {/* refine further */}
+          <div className="panel">
+            <label className="flabel" htmlFor="ai-followup">
+              Refine further
+            </label>
+            <div className="field-row">
+              <input
+                id="ai-followup"
+                type="text"
+                style={{ flex: 1, minWidth: 200 }}
+                placeholder='e.g. "make it more formal"'
+                value={state.followupInput}
+                onChange={(e) => dispatch({ type: "SET_FOLLOWUP_INPUT", text: e.target.value })}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") runFollowup();
+                }}
+              />
+              <button className="btn secondary" onClick={runFollowup} disabled={state.loading || !state.followupInput.trim()}>
+                {state.loading ? <span className="spinner" aria-hidden="true" /> : <Icon name="send" size={15} />}
+                {state.loading ? "Sending…" : "Send"}
+              </button>
+            </div>
+
+            {state.chat.length > 0 && (
+              <details className="chat-fold">
+                <summary>Conversation ({state.chat.length} turns)</summary>
+                <div className="chat-log" role="log" aria-label="Conversation with StaffAI">
+                  {state.chat.map((m, i) => (
+                    <div key={i} className={`chat-bubble ${m.role}`}>
+                      {m.content}
+                    </div>
+                  ))}
                 </div>
-              ))}
-            </div>
-          )}
-
-          <div className="field-row" style={{ marginTop: 10 }}>
-            <input
-              type="text"
-              style={{ flex: 1 }}
-              placeholder='Refine further, e.g. "make it more formal"'
-              value={state.followupInput}
-              onChange={(e) => dispatch({ type: "SET_FOLLOWUP_INPUT", text: e.target.value })}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") runFollowup();
-              }}
-            />
-            <button className="btn secondary small" onClick={runFollowup} disabled={state.loading || !state.followupInput.trim()}>
-              {state.loading && <span className="spinner" aria-hidden="true" />}
-              {state.loading ? "Sending..." : "Send"}
-            </button>
-            {state.loading && (
-              <button className="btn secondary small" onClick={stopAIRequest}>
-                Stop
-              </button>
+              </details>
             )}
           </div>
         </div>

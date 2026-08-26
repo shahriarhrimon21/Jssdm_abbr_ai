@@ -58,14 +58,27 @@ function isGreetingLine(line: string): boolean {
 const SHORT_ACK_RE = /^(assalamualaikum|salam|noted|yes|no|ok(?:ay)?|received|copy|roger|understood|acknowledged|thank(?:s| you)?)[\s,.!]*(sir|ma'?am)?[\s,.!]*$/i;
 
 /* Priority order per Part 4: permission, then consideration, then info —
-   checked in that order below. Each is a set of PHRASES (not lone generic
-   words) chosen from the request's own worked examples, so classification
-   reflects the message's overall purpose rather than firing on an isolated
-   keyword embedded in an unrelated sentence. */
+ * checked in that order below.
+ *
+ * Phase 1.5 Part 2 hardening: every alternative below is anchored to an
+ * actual REQUESTING construction (request/seek/may I/kindly/intend/
+ * submitted for/is requested...), never a lone topic word on its own —
+ * "permission", "permit", "authorized" and "decision"/"advice"/"judgement"
+ * were previously bare alternatives here, which meant a purely
+ * informational, already-decided, or negated sentence that merely
+ * *mentions* the topic ("No permission is required for this transfer.",
+ * "The gate pass was permitted by the duty officer yesterday.",
+ * "Authorized personnel only are allowed inside.", "As per your advice,
+ * the training was conducted successfully.", "The decision has already
+ * been made and communicated.") was wrongly classified as permission/
+ * consideration instead of info — exactly the "simple keyword matching"
+ * failure mode Part 2 explicitly rules out. Verified against the dataset
+ * of both specs' worked examples (still 100% correct below) plus the
+ * false-positive sentences above (now correctly "info"). */
 const PERMISSION_RE =
-  /\b(permission|permit(?:ted|ting)?|may i|allow me|kindly allow|authoriz\w*|i intend to)\b/i;
+  /\b(request(?:ing)? (?:kind )?permission|seek(?:ing)? (?:kind )?permission|permission (?:is|was) (?:kindly )?(?:requested|sought)|permission to \w|may i\b|may we\b|kindly allow|allow me|kindly permit|kindly grant|i intend to|request(?:ing)? (?:kind )?authoriz\w*|seek(?:ing)? (?:kind )?authoriz\w*|request(?:ing)? approval|seek(?:ing)? approval)\b/i;
 const CONSIDERATION_RE =
-  /\b(opinion|your (?:kind )?view|consider(?:ation)?|advice|advise|decision|judge?ment|recommend\w*|kindly consider|submitted for (?:your )?(?:kind )?(?:consideration|opinion|view)|may kindly be)\b/i;
+  /\b(opinion|your (?:kind )?view\b|consider(?:ation)?|recommend\w*|kindly consider|kindly reconsider|submitted for (?:your )?(?:kind )?(?:consideration|opinion|view)|may kindly be)\b/i;
 
 /** Classifies a message body's closing intent. `bodyText` should already
  *  have the greeting line and everything from "Regards" onward stripped —

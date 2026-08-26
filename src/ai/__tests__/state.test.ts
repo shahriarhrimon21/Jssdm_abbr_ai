@@ -169,3 +169,85 @@ test("RESET preserves outputMode and signature alongside mode/tone (settings sur
   assert.equal(s.jssdmGenerated, null);
   assert.equal(s.finalEdited, null, "RESET is the one place hand-edited final text IS cleared — it's an explicit full reset, not silent overwrite");
 });
+
+/* ---- Phase 1.5 Part 1: loadedHistoryRecordId lifecycle ---- */
+
+test("LOAD_HISTORY_RECORD replaces the entire pipeline and marks the record as loaded", () => {
+  const s = assistantReducer(initialAssistantState, {
+    type: "LOAD_HISTORY_RECORD",
+    recordId: "mh_1",
+    outputMode: "whatsapp",
+    original: "orig msg",
+    aiFinal: "ai msg",
+    aiEditedDraft: "edited ai msg",
+    jssdmGenerated: "jssdm msg",
+    finalEdited: "final msg",
+  });
+  assert.equal(s.loadedHistoryRecordId, "mh_1");
+  assert.equal(s.outputMode, "whatsapp");
+  assert.equal(s.original, "orig msg");
+  assert.equal(s.aiFinal, "ai msg");
+  assert.equal(s.aiEditedDraft, "edited ai msg");
+  assert.equal(s.jssdmGenerated, "jssdm msg");
+  assert.equal(s.finalEdited, "final msg");
+  assert.deepEqual(s.jssdmGeneratedSpans, []);
+  assert.deepEqual(s.chat, [
+    { role: "user", content: "orig msg" },
+    { role: "assistant", content: "ai msg" },
+  ]);
+});
+
+test("loadedHistoryRecordId survives editing the AI draft, running the engine, and editing the final result", () => {
+  let s = assistantReducer(initialAssistantState, {
+    type: "LOAD_HISTORY_RECORD",
+    recordId: "mh_1",
+    outputMode: "text",
+    original: "orig",
+    aiFinal: "ai",
+    aiEditedDraft: "ai",
+    jssdmGenerated: null,
+    finalEdited: null,
+  });
+  s = assistantReducer(s, { type: "SET_AI_EDITED_DRAFT", text: "ai edited" });
+  assert.equal(s.loadedHistoryRecordId, "mh_1");
+  s = assistantReducer(s, { type: "JSSDM_GENERATED", text: "jssdm out", spans: [] });
+  assert.equal(s.loadedHistoryRecordId, "mh_1");
+  s = assistantReducer(s, { type: "SET_FINAL_EDITED", text: "final edited" });
+  assert.equal(s.loadedHistoryRecordId, "mh_1", "editing the final result is still editing the same loaded record");
+});
+
+test("SET_ORIGINAL (starting a fresh regeneration) clears loadedHistoryRecordId — a new derivation, not an edit of the loaded record", () => {
+  let s = assistantReducer(initialAssistantState, {
+    type: "LOAD_HISTORY_RECORD",
+    recordId: "mh_1",
+    outputMode: "text",
+    original: "orig",
+    aiFinal: "ai",
+    aiEditedDraft: "ai",
+    jssdmGenerated: null,
+    finalEdited: null,
+  });
+  s = assistantReducer(s, { type: "SET_ORIGINAL", text: "a brand new topic" });
+  assert.equal(s.loadedHistoryRecordId, null);
+});
+
+test("RESET clears loadedHistoryRecordId", () => {
+  let s = assistantReducer(initialAssistantState, {
+    type: "LOAD_HISTORY_RECORD",
+    recordId: "mh_1",
+    outputMode: "text",
+    original: "orig",
+    aiFinal: "ai",
+    aiEditedDraft: "ai",
+    jssdmGenerated: null,
+    finalEdited: null,
+  });
+  s = assistantReducer(s, { type: "RESET" });
+  assert.equal(s.loadedHistoryRecordId, null);
+});
+
+test("SET_LOADED_HISTORY_RECORD_ID sets the id after a Save as New, so a further save defaults to Update Existing", () => {
+  let s = assistantReducer(initialAssistantState, { type: "SET_ORIGINAL", text: "orig" });
+  s = assistantReducer(s, { type: "SET_LOADED_HISTORY_RECORD_ID", recordId: "mh_new" });
+  assert.equal(s.loadedHistoryRecordId, "mh_new");
+});

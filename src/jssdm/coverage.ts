@@ -24,6 +24,14 @@ export interface FullFormCollision {
    *  correctly handled by resolveReverseAmbiguity (the Personnel/pers fix)
    *  and not a bug. */
   reverseAmbiguityHandled: boolean;
+  /** true when every same-service duplicate in this group is a genuine
+   *  Rank-vs-other-category pair — already correctly handled by
+   *  database.ts's applySameServiceRankPriority (the Phase 1.5 "Sepoy"
+   *  fix, which also generalized to "Master Chief Petty Officer" and
+   *  "Petty Officer") and not a bug. A group with no same-service
+   *  duplicate at all (already force-differentiated) reports false here —
+   *  this flag only ever fires to explain an otherwise-unresolved group. */
+  sameServiceRankPriorityHandled: boolean;
 }
 
 export interface CoverageReport {
@@ -39,6 +47,29 @@ export interface CoverageReport {
 }
 
 const DERIVED_NOTATIONS = new Set(["variation", "shared-prefix", "positional", "alt-abbr"]);
+
+/** Mirrors database.ts's applySameServiceRankPriority *detection* condition
+ *  (not the reordering itself, which this audit-only report has no need to
+ *  perform): true only when every same-service subgroup of 2+ candidates in
+ *  `list` is resolvable by Rank-vs-non-Rank priority, and there is at least
+ *  one such subgroup to resolve in the first place. */
+function isSameServiceRankPriorityHandled(list: Entry[]): boolean {
+  const byService = new Map<string, Entry[]>();
+  list.forEach((e) => {
+    const k = e.service || "";
+    if (!byService.has(k)) byService.set(k, []);
+    byService.get(k)!.push(e);
+  });
+  let hasSameServiceDuplicate = false;
+  for (const members of byService.values()) {
+    if (members.length < 2) continue;
+    hasSameServiceDuplicate = true;
+    const hasRank = members.some((e) => e.category === "Rank");
+    const hasNonRank = members.some((e) => e.category !== "Rank");
+    if (!hasRank || !hasNonRank) return false;
+  }
+  return hasSameServiceDuplicate;
+}
 
 export function buildCoverageReport(): CoverageReport {
   const byNotation: Record<string, number> = {};
@@ -103,16 +134,20 @@ export function buildCoverageReport(): CoverageReport {
       // by reverseAmbiguityHandled below) or two entries pinned to the same
       // force (a genuine duplicate, e.g. "Sepoy") — needs a human look.
       const reverseAmbiguityHandled = list.every((e) => e.reverseAmbiguous);
+      const sameServiceRankPriorityHandled = isSameServiceRankPriorityHandled(list);
       fullFormCollisions.push({
         full: list[0].full,
         candidates: list.map((e) => ({ abbr: e.abbr, service: e.service })),
         forceDifferentiated,
         reverseAmbiguityHandled,
+        sameServiceRankPriorityHandled,
       });
     }
   });
   fullFormCollisions.sort((a, b) => a.full.localeCompare(b.full));
-  const unresolvedFullFormCollisions = fullFormCollisions.filter((c) => !c.forceDifferentiated && !c.reverseAmbiguityHandled);
+  const unresolvedFullFormCollisions = fullFormCollisions.filter(
+    (c) => !c.forceDifferentiated && !c.reverseAmbiguityHandled && !c.sameServiceRankPriorityHandled,
+  );
 
   return {
     totalEntries: ENTRIES.length,

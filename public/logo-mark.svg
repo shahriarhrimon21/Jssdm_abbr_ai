@@ -1,0 +1,39 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="JSSDM ABBR StaffAI">
+  <!--
+    Compact mark — used 28-64px (sidebar header, top bar, install card).
+    A reduction of the approved crest, not a redraw: the heraldic double
+    ring, the deep-green field and the tri-service division are the three
+    elements that still read once the wreath, globe, manual, laptop and
+    ribbon have been dropped.
+
+    The division is drawn as three filled wedges separated by gold gaps
+    rather than as three gold strokes on a solid roundel. Strokes of that
+    weight close up and read as a single blob below ~32px; wedges keep the
+    three-part silhouette legible all the way down. Everything under ~64px
+    uses this mark; the full crest is never scaled into this range.
+  -->
+  <defs>
+    <linearGradient id="mkGold" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#F4D98F"/>
+      <stop offset=".45" stop-color="#C9A227"/>
+      <stop offset="1" stop-color="#8A6A18"/>
+    </linearGradient>
+    <linearGradient id="mkField" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#14503A"/>
+      <stop offset="1" stop-color="#052018"/>
+    </linearGradient>
+  </defs>
+
+  <!-- field + heraldic double ring -->
+  <circle cx="32" cy="32" r="30.2" fill="url(#mkField)"/>
+  <circle cx="32" cy="32" r="30.2" fill="none" stroke="url(#mkGold)" stroke-width="3.6"/>
+  <circle cx="32" cy="32" r="24.6" fill="none" stroke="url(#mkGold)" stroke-width="1.1" opacity=".7"/>
+
+  <!-- tri-service roundel: gold ground, three maroon wedges, gold gaps -->
+  <circle cx="32" cy="32" r="18.6" fill="url(#mkGold)"/>
+  <g fill="#78121F">
+    <path d="M32 32 46.1 22.9A17 17 0 0 0 17.9 22.9Z"/>
+    <path d="M32 32 16.9 24.3A17 17 0 0 0 31.1 49Z"/>
+    <path d="M32 32 32.9 49A17 17 0 0 0 47.1 24.3Z"/>
+  </g>
+</svg>

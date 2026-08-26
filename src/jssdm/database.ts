@@ -249,6 +249,74 @@ if (suspectFragmentIds.size) {
   });
 }
 
+/**
+ * Same-force Rank-vs-other-category collision priority (Phase 1.5 —
+ * "Sepoy" ambiguity): confirmed against the dataset, "Sepoy" has TWO
+ * distinct Army-service entries with the exact same full text — id 2252
+ * ("sep", category "Appointment") and id 2598 ("Sep", category "Rank",
+ * tier "Other Ranks"). Both are genuine, independently-authored Section 16
+ * entries (neither has an originalEntry backreference, so this is not the
+ * incomplete-fragment bug above) — this is a real one-word/two-meanings
+ * case, the same shape as the "Commander" collision already handled by
+ * resolveForceEntries + resolveReverseAmbiguity, just not resolvable by
+ * either of those (both entries are the SAME force, and this isn't an
+ * Annex B reverse mapping).
+ *
+ * The fix is data-driven, not a hardcoded "Sepoy" check: a bare word's
+ * single most common real-world use in military writing is as a rank
+ * placed before a name (e.g. "Sepoy Karim"), and the dataset already
+ * marks exactly that meaning — every "Rank"-category entry carries a
+ * `tier` (Officer/Other Ranks/Sailor/Airmen, confirmed 56/56 Rank entries
+ * have one), which no other category does. So: within a fullIndex
+ * collision, entries are grouped by `service`, and WITHIN each same-service
+ * group only, a Rank-category entry is stably sorted ahead of a
+ * non-Rank-category entry for that group. This never reorders entries
+ * *across* different services (that stays resolveForceEntries's job one
+ * layer up — e.g. the Army/Navy/general split for "Commander" is
+ * untouched) — it only breaks a same-service tie the way Section 16's own
+ * Rank/tier metadata already implies. The non-Rank meaning is never
+ * deleted or hidden — it's still the second candidate, still surfaced via
+ * "context" status, exactly like every other disclosed alternative in this
+ * engine.
+ */
+function applySameServiceRankPriority(arr: Entry[]): Entry[] {
+  const groups = new Map<string, Entry[]>();
+  arr.forEach((e) => {
+    const key = e.service || "";
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key)!.push(e);
+  });
+  groups.forEach((members, key) => {
+    if (members.length < 2) return;
+    const hasRank = members.some((e) => e.category === "Rank");
+    const hasNonRank = members.some((e) => e.category !== "Rank");
+    if (!hasRank || !hasNonRank) return; // nothing to prioritize within this service group
+    groups.set(
+      key,
+      members.slice().sort((a, b) => Number(b.category === "Rank") - Number(a.category === "Rank")),
+    );
+  });
+  const cursors = new Map<string, number>();
+  return arr.map((e) => {
+    const key = e.service || "";
+    const i = cursors.get(key) || 0;
+    cursors.set(key, i + 1);
+    return groups.get(key)![i];
+  });
+}
+fullIndex.forEach((arr, key) => {
+  if (arr.length < 2) return;
+  const services = new Set(arr.map((e) => e.service || ""));
+  let needsPriority = false;
+  services.forEach((svc) => {
+    const members = arr.filter((e) => (e.service || "") === svc);
+    if (members.length > 1 && members.some((e) => e.category === "Rank") && members.some((e) => e.category !== "Rank")) {
+      needsPriority = true;
+    }
+  });
+  if (needsPriority) fullIndex.set(key, applySameServiceRankPriority(arr));
+});
+
 export function lookupAbbrExact(token: string): Entry[] | null {
   if (abbrIndexCS.has(token)) return abbrIndexCS.get(token)!.slice();
   return null;

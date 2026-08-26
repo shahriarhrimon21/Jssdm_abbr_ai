@@ -23,6 +23,20 @@ test("dataset loads with the expected shape", () => {
   assert.ok(RULES.length > 15, "expected rules to be loaded");
 });
 
+/* ---- JSSDM engine audit fix: "Vehicle" -> "veh", not "UAS/UAV". Root
+ * cause was a bad "/" split of a combined manual listing ("Unarmed/Unmanned
+ * Aerial System/Vehicle" -> UAS/UAV) that produced a bare leftover fragment
+ * "Vehicle" which silently outranked the real, distinct "Vehicle" -> "veh"
+ * entry (see database.ts's fullVariants `exact` stable-sort). This was
+ * previously verified only via a throwaway script, never as a permanent
+ * regression test — added here per Phase 1.5 Part 5. */
+test('CRITICAL: "Vehicle" abbreviates to "veh", not "UAS/UAV" (bad "/" split regression)', () => {
+  assert.equal(runAbbreviate("Vehicle movement report.", "all").rows[0].abbr, "veh");
+  assert.equal(runAbbreviate("The vehicle was inspected.", "all").rows[0].abbr, "veh", "case-insensitive");
+  assert.equal(runAbbreviate("VEHICLE reported.", "all").rows[0].abbr, "veh", "all-caps input");
+  assert.equal(runAbbreviate("Vehicles were inspected.", "all").rows[0].abbr, "vehs", "rule-derived plural");
+});
+
 /* ---- The critical, user-reported case: Personnel -> pers, not PA ---- */
 test('CRITICAL: "Personnel" abbreviates to "pers", not "PA"', () => {
   const r = runAbbreviate("Personnel are en route.", "all");
@@ -175,11 +189,67 @@ test("coverage report: only Annex B has 2 reverse collisions (Personnel resolved
   assert.equal(record?.resolution, "tied");
 });
 
-test("coverage report: whole-corpus collision scan finds exactly the known 14, 13 handled + 1 flagged (Sepoy)", () => {
+test("coverage report: whole-corpus collision scan finds exactly the known 14, all 14 now handled (Phase 1.5: Sepoy resolved via same-service Rank priority)", () => {
   const r = buildCoverageReport();
   assert.equal(r.fullFormCollisions.length, 14);
-  assert.equal(r.unresolvedFullFormCollisions.length, 1);
-  assert.equal(r.unresolvedFullFormCollisions[0].full, "Sepoy");
+  assert.equal(
+    r.unresolvedFullFormCollisions.length,
+    0,
+    "Sepoy was the sole remaining unresolved case; it is now resolved, not deleted or hidden",
+  );
+  const sepoy = r.fullFormCollisions.find((c) => c.full === "Sepoy");
+  assert.ok(sepoy, "Sepoy must still be surfaced in the audit — resolved, not silently dropped from the report");
+  assert.equal(sepoy?.forceDifferentiated, false, "both Sepoy entries are Army — a real same-service duplicate, not force-differentiated");
+  assert.equal(sepoy?.reverseAmbiguityHandled, false, "Sepoy is not an Annex B reverse-mapping entry");
+  assert.equal(sepoy?.sameServiceRankPriorityHandled, true);
+  assert.deepEqual(
+    sepoy?.candidates.map((c) => c.abbr).sort(),
+    ["Sep", "sep"],
+    "the non-Rank meaning ('sep', Appointment) must still be listed, not removed",
+  );
+});
+
+/* ---- Phase 1.5 Part 3: "Sepoy" ambiguity — resolved via data (the dataset's
+ * own Rank/tier metadata), not a hardcoded string check. A bare rank word's
+ * single most common real-world use is as a rank placed before a name, so
+ * within a same-service fullIndex collision, the Rank-category candidate is
+ * preferred — the non-Rank meaning is never deleted, only ranked second and
+ * still reachable via "context" status / lookupFullExact. Confirmed to
+ * generalize to two more real same-service Rank collisions in the corpus
+ * (Master Chief Petty Officer, Petty Officer — both Navy, colliding with
+ * their own "(Cook)"/"(Medical)"/etc. Appointment siblings' paren-stripped
+ * variant), with zero effect on the unrelated cross-force "Commander"
+ * collision (Army "Comd" vs Navy "Cdr" — a different service each, so
+ * resolveForceEntries's existing force-priority logic still owns it). */
+test('Sepoy: bare word abbreviates to the Rank meaning ("Sep"), the Appointment meaning ("sep") still disclosed as context', () => {
+  const r = runAbbreviate("Sepoy Karim reported for duty.", "Army");
+  assert.equal(r.rows[0].abbr, "Sep");
+  assert.equal(r.rows[0].status, "context", "a same-service Rank-priority pick is still disclosed, not silently forced as 'ok'");
+  const abbrs = r.rows[0].entries.map((e) => e.abbr).sort();
+  assert.deepEqual(abbrs, ["Sep", "sep"], "the non-Rank meaning must still be surfaced, not deleted");
+});
+
+test("Sepoy: resolution is case-insensitive and consistent with force='all'", () => {
+  const lower = runAbbreviate("The sepoy reported.", "Army");
+  const upper = runAbbreviate("SEPOY reported.", "Army");
+  const allForce = runAbbreviate("Sepoy Karim reported.", "all");
+  assert.equal(lower.rows[0].abbr, "Sep");
+  assert.equal(upper.rows[0].abbr, "Sep");
+  assert.equal(allForce.rows[0].abbr, "Sep");
+});
+
+test("Sepoy fix generalizes: Master Chief Petty Officer / Petty Officer (Navy) also prefer their Rank meaning", () => {
+  const mcpo = runAbbreviate("The master chief petty officer reported.", "Navy");
+  assert.match(mcpo.output, /\bMCPO\b/);
+  const po = runAbbreviate("The petty officer reported.", "Navy");
+  assert.match(po.output, /\bPO\b/);
+});
+
+test("Sepoy fix does not affect the unrelated cross-force Commander collision (Army Comd vs Navy Cdr)", () => {
+  const army = runAbbreviate("Commander addressed the unit.", "Army");
+  assert.equal(army.rows[0].abbr, "Comd");
+  const navy = runAbbreviate("Commander addressed the unit.", "Navy");
+  assert.equal(navy.rows[0].abbr, "Cdr");
 });
 
 /* ---- Debug trace mode ---- */
