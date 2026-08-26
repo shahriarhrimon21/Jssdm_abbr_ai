@@ -44,8 +44,8 @@ src/
   App.tsx, main.tsx, nav.ts, styles/app.css
 netlify/functions/
   ai.ts                   the ONLY place any AI API key is read
-  providers/               one file per AI provider (gemini implemented;
-                            openai/claude scaffolded for later)
+  providers/               one file per AI provider (gemini and openai
+                            implemented; claude scaffolded for later)
 ```
 
 ## Local development
@@ -132,6 +132,25 @@ AI Writing Assistant needs the key.)
 Netlify gives you a web address like `your-site-name.netlify.app`. That's
 the real, working site — share that link with anyone.
 
+**Step 8 (optional but recommended) — Add OpenAI as a backup provider.**
+As of this writing, Google is mid-rollout of a new Gemini API key format
+(keys starting `AQ.` instead of `AIza...`), and it's actively rejecting
+valid keys for many accounts — a known, open issue on Google's own
+developer forums, not something wrong with your setup. If you hit "API key
+not valid" and a freshly generated key doesn't fix it, add a second
+provider as a working fallback:
+- Get a key from [platform.openai.com/api-keys](https://platform.openai.com/api-keys)
+  (note: unlike Gemini's free tier, OpenAI requires a billing method on
+  the account).
+- In Netlify: **Site configuration → Environment variables → Add a
+  variable** → Key: `OPENAI_API_KEY` → Value: your key → Save → redeploy.
+- In the app itself, open **AI Writing Assistant** and switch the
+  **AI provider** dropdown from "Google Gemini" to "OpenAI".
+
+Both providers can be configured at once — the dropdown just decides which
+one handles that particular request, so you can switch back to Gemini once
+Google's rollout issue is resolved.
+
 **Making changes later:** whenever you have an updated version of the
 project (e.g. a new zip from me), go back to your GitHub repository, click
 **Add file → Upload files**, and drag the changed files in the same way.
@@ -163,11 +182,16 @@ git push
 Everything else (Steps 5-7) is identical either way.
 </details>
 
-If you ever want to add a second AI provider (OpenAI, Claude), it's a new
-file in `netlify/functions/providers/` implementing the same interface as
-`gemini.ts`, one line registering it in `netlify/functions/ai.ts`, and its
-own `*_API_KEY` environment variable in Netlify — the frontend and the
-request contract to `/.netlify/functions/ai` do not change.
+OpenAI is already implemented as a second provider (see Step 8 above) — it
+was added specifically as a working fallback for Google's Gemini key
+rollout issues, and doubles as proof the provider abstraction works as
+intended. If you want to add a third (e.g. Claude), it's a new file in
+`netlify/functions/providers/` implementing the same interface as
+`gemini.ts`/`openai.ts`, one line registering it in
+`netlify/functions/ai.ts`'s `PROVIDERS` map, its own `*_API_KEY`
+environment variable in Netlify, and one line in the AI Writing
+Assistant's provider dropdown (`src/pages/AIWritingAssistant.tsx`) — the
+request contract to `/.netlify/functions/ai` does not change.
 
 ## Verification status (read this before trusting "it works")
 
@@ -189,11 +213,12 @@ honest, so here is exactly what was and wasn't verified, and how:
 - The AI Writing Assistant's state reducer (`src/ai/state.ts`) — 4
   regression tests confirming the three text states (Original/AI
   Final/JSSDM Final) never overwrite each other.
-- The Netlify Function (`netlify/functions/ai.ts`) — invoked directly with
-  real `Request` objects: correctly rejects non-POST, malformed JSON, and
-  missing fields; correctly reports "not configured" with no key set; and
-  fails gracefully (no stack trace, no key ever in the response) when the
-  key is set but the network call itself fails.
+- The Netlify Function (`netlify/functions/ai.ts`), for both the Gemini and
+  OpenAI providers — invoked directly with real `Request` objects:
+  correctly rejects non-POST, malformed JSON, and missing fields; correctly
+  reports "not configured" with no key set; and fails gracefully (no stack
+  trace, no key ever in the response) when a key is set but the upstream
+  call itself fails.
 - Every React component (all 19: `App` and every page/shared component) —
   server-rendered via `react-dom/server` (`scripts/verify-render.tsx`,
   run with `tsx`, using this environment's pre-installed global `react`/
@@ -212,12 +237,19 @@ honest, so here is exactly what was and wasn't verified, and how:
   was written carefully against React 18's API surface, and every
   component's JSX was confirmed to *render* correctly (above), but this is
   not the same guarantee as a clean type-check.
-- The AI Writing Assistant's actual call to Gemini, end-to-end in a real
-  browser — the request/response contract matches what was verified
-  working in the earlier single-file client-side prototype (correct model
-  ID `gemini-3.6-flash`, correct auth header, correct response parsing),
-  and the server-side error handling was exercised directly (above), but
-  a full browser round-trip through `netlify dev` was not run here.
+- The AI Writing Assistant's actual call to Gemini or OpenAI, end-to-end in
+  a real browser — the Gemini request/response contract matches what was
+  verified working in the earlier single-file client-side prototype
+  (correct auth header, correct response parsing); the OpenAI request/
+  response contract follows the long-stable Chat Completions API shape.
+  Server-side error handling was exercised directly for both (above), but
+  a full browser round-trip through `netlify dev` was not run for either.
+  **Known live issue as of this writing:** Google is mid-rollout of a new
+  Gemini API key format (`AQ.` prefix), and it is currently rejecting
+  valid keys for many accounts with "API key not valid" — a known, open
+  issue on Google's own developer forums, unrelated to this app's request
+  code. The OpenAI provider was added specifically as a working fallback
+  for this — see the README's Step 8 above.
 - Mobile/responsive layout in an actual browser — the CSS is carried over
   unchanged from the previously-shipped, visually-reviewed prototype
   (including its `@media (max-width:820px)` rules), but was not

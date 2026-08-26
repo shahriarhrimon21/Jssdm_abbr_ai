@@ -6,12 +6,38 @@ import { runAbbreviate } from "../jssdm/abbreviationEngine.ts";
 import HighlightedText from "../components/HighlightedText.tsx";
 import ForceSelect from "../components/ForceSelect.tsx";
 
+const LS_PROVIDER = "jssdm_ai_provider_v1";
+const PROVIDERS = [
+  { id: "gemini", label: "Google Gemini" },
+  { id: "openai", label: "OpenAI" },
+];
+function loadStoredProvider(): string {
+  try {
+    return localStorage.getItem(LS_PROVIDER) || "gemini";
+  } catch {
+    return "gemini";
+  }
+}
+function storeProvider(id: string): void {
+  try {
+    localStorage.setItem(LS_PROVIDER, id);
+  } catch {
+    /* best-effort only */
+  }
+}
+
 export default function AIWritingAssistant({ force, setForce }: { force: string; setForce: (f: string) => void }) {
   const [state, dispatch] = useReducer(assistantReducer, initialAssistantState);
   const [draftInput, setDraftInput] = useState("");
   const [followup, setFollowup] = useState("");
   const [copiedAI, setCopiedAI] = useState(false);
   const [copiedJssdm, setCopiedJssdm] = useState(false);
+  const [provider, setProvider] = useState(loadStoredProvider);
+
+  function changeProvider(id: string) {
+    setProvider(id);
+    storeProvider(id);
+  }
 
   async function runInitial() {
     if (!draftInput.trim()) return;
@@ -19,6 +45,7 @@ export default function AIWritingAssistant({ force, setForce }: { force: string;
     dispatch({ type: "REQUEST_START" });
     const systemPrompt = buildSystemPrompt(state.mode, state.tone, state.customTone);
     const result = await callAI({
+      provider,
       systemPrompt,
       messages: [{ role: "user", content: draftInput }],
     });
@@ -34,6 +61,7 @@ export default function AIWritingAssistant({ force, setForce }: { force: string;
     dispatch({ type: "REQUEST_START" });
     const systemPrompt = buildSystemPrompt(state.mode, state.tone, state.customTone);
     const result = await callAI({
+      provider,
       systemPrompt,
       messages: [...state.chat, { role: "user", content: followup }],
     });
@@ -87,6 +115,18 @@ export default function AIWritingAssistant({ force, setForce }: { force: string;
             <button className={state.mode === "generate" ? "active" : ""} onClick={() => dispatch({ type: "SET_MODE", mode: "generate" })}>
               Generate
             </button>
+          </div>
+          <div>
+            <label className="flabel" htmlFor="ai-provider">
+              AI provider
+            </label>
+            <select id="ai-provider" value={provider} onChange={(e) => changeProvider(e.target.value)}>
+              {PROVIDERS.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.label}
+                </option>
+              ))}
+            </select>
           </div>
           <ForceSelect value={force} onChange={setForce} />
         </div>
