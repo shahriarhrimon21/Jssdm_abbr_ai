@@ -33,12 +33,25 @@
  * Web Request/Response ./_lib/handler.ts is written against, so this file
  * is a small adapter: build a real Request from the incoming req, hand it
  * to the shared handler unmodified, then translate the Response it
- * returns back into res.status()/setHeader()/send() calls. req/res are
- * typed loosely (not import type { VercelRequest, VercelResponse } from
- * "@vercel/node") so this file has no new dependency to install — Vercel
- * provides the actual objects at runtime regardless of local types, and
- * the shapes used below (method, headers, url, body / status, setHeader,
- * send) are Vercel's documented stable contract for this runtime.
+ * returns back into res.status()/setHeader()/send() calls. It deliberately
+ * does NOT forward the original request's headers into the reconstructed
+ * Request — the shared handler never reads request.headers (only
+ * request.method and request.json()), and forwarding headers verbatim was
+ * a needless source of risk (a forbidden/malformed header name throwing
+ * inside the adapter itself, outside the shared handler's own try/catch,
+ * would produce Vercel's generic non-JSON error page instead of a proper
+ * { ok: false, error } response — exactly the "unexpected response" the
+ * browser showed once already). The whole adapter is also wrapped in its
+ * own try/catch for the same reason: whatever goes wrong here must still
+ * come back as valid JSON, with the real error visible in Vercel's own
+ * Function Logs (via console.error) for whoever needs to debug it next.
+ *
+ * req/res are typed loosely (not `import type { VercelRequest,
+ * VercelResponse } from "@vercel/node"`) so this file has no new
+ * dependency to install — Vercel provides the actual objects at runtime
+ * regardless of local types, and the shapes used below (method, body /
+ * status, setHeader, send) are Vercel's documented stable contract for
+ * this runtime.
  *
  * Requires the SAME environment variables as Netlify, set separately in
  * this Vercel project's own Settings -> Environment Variables (Vercel and
@@ -49,31 +62,46 @@
  */
 import handleAIRequest from "./_lib/handler.ts";
 
+/**
+ * Vercel's Node runtime auto-parses a JSON request body into req.body for
+ * a Content-Type: application/json request (what client.ts always sends),
+ * but doesn't guarantee it always arrives as a plain object — depending on
+ * how the platform decides to parse a given request it could already be a
+ * JSON-shaped object, a raw string, or a Buffer (e.g. if body parsing were
+ * ever disabled or the content type weren't recognized). Handle all three
+ * so the shared handler's request.json() call gets valid JSON text either
+ * way, instead of silently mis-stringifying the wrong representation.
+ */
+function bodyToString(req: any): string | undefined {
+  const b = req.body;
+  if (b === undefined || b === null) return undefined;
+  if (typeof b === "string") return b;
+  if (typeof Buffer !== "undefined" && Buffer.isBuffer(b)) return b.toString("utf-8");
+  return JSON.stringify(b);
+}
+
 export default async function handler(req: any, res: any): Promise<void> {
-  const headers = new Headers();
-  for (const [key, value] of Object.entries<unknown>(req.headers || {})) {
-    if (value === undefined) continue;
-    headers.set(key, Array.isArray(value) ? value.join(", ") : String(value));
+  try {
+    const method = req.method || "GET";
+    const hasBody = method !== "GET" && method !== "HEAD";
+
+    // A syntactically valid absolute URL is all Request() needs — this
+    // Request is never actually sent over the network, only read locally
+    // by the shared handler, so the host/path here are placeholders.
+    const request = new Request("https://internal.invalid/api/ai", {
+      method,
+      body: hasBody ? (bodyToString(req) ?? "{}") : undefined,
+    });
+
+    const response = await handleAIRequest(request);
+
+    res.status(response.status);
+    res.setHeader("Content-Type", response.headers.get("Content-Type") || "application/json");
+    res.send(await response.text());
+  } catch (err) {
+    console.error("api/ai.ts adapter error:", err);
+    res.status(500);
+    res.setHeader("Content-Type", "application/json");
+    res.send(JSON.stringify({ ok: false, error: "Unexpected server error handling the AI request. Please try again." }));
   }
-
-  const host = req.headers?.host || "localhost";
-  const method = req.method || "GET";
-  const hasBody = method !== "GET" && method !== "HEAD";
-
-  const request = new Request(`https://${host}${req.url || "/api/ai"}`, {
-    method,
-    headers,
-    // Vercel's Node runtime auto-parses a JSON request body into req.body
-    // for a Content-Type: application/json request (what client.ts always
-    // sends) — re-stringify it so the shared handler's own request.json()
-    // call works exactly as it does on Netlify, which hands it a real
-    // fetch Request whose body was never pre-parsed.
-    body: hasBody ? JSON.stringify(req.body ?? {}) : undefined,
-  });
-
-  const response = await handleAIRequest(request);
-
-  res.status(response.status);
-  response.headers.forEach((value: string, key: string) => res.setHeader(key, value));
-  res.send(await response.text());
 }

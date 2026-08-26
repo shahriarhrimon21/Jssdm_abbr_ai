@@ -299,8 +299,14 @@ honest, so here is exactly what was and wasn't verified, and how:
   Vercel's `api/ai.ts` req/res adapter is tested against a mock response
   object to confirm it correctly translates Vercel's (req, res) call shape
   into the Request the shared handler expects and relays its Response back
-  correctly (status, headers, body). 15 regression tests total across
-  `netlify/functions/__tests__/ai.test.ts` and `api/__tests__/ai.test.ts`.
+  correctly (status, headers, body) — including three request-body shapes
+  (already-parsed object, raw JSON string, Buffer) since Vercel's body
+  auto-parsing isn't guaranteed to hand back the same shape every time, and
+  a test proving the adapter's own try/catch always returns valid JSON
+  rather than ever letting an unexpected throw escape as Vercel's generic
+  non-JSON error page (the exact failure this app hit once already). 19
+  regression tests total across `netlify/functions/__tests__/ai.test.ts`
+  and `api/__tests__/ai.test.ts`.
 - Every React component (all 19: `App` and every page/shared component) —
   server-rendered via `react-dom/server` (`scripts/verify-render.tsx`,
   run with `tsx`, using this environment's pre-installed global `react`/
