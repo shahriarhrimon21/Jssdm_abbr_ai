@@ -1,0 +1,32 @@
+[build]
+  command = "npm run build"
+  publish = "dist"
+  functions = "netlify/functions"
+
+[functions]
+  node_bundler = "esbuild"
+
+# Explicit passthrough so the SPA fallback below never shadows the function
+# route (Netlify normally resolves /.netlify/functions/* before user
+# redirects anyway, but this makes the intent explicit rather than relying
+# on implicit ordering).
+[[redirects]]
+  from = "/.netlify/functions/*"
+  to = "/.netlify/functions/:splat"
+  status = 200
+
+# Client-side router fallback (the app is a single page; all internal
+# navigation is in-memory state, not real routes, but this keeps a direct
+# reload/deep-link from ever 404ing).
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
+
+[dev]
+  command = "npm run dev"
+  targetPort = 5173
+  port = 8888
+  publish = "dist"
+  functions = "netlify/functions"
+  autoLaunch = false
