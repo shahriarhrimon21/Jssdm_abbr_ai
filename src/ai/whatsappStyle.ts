@@ -17,7 +17,15 @@
  * see Part 22 of the request this was built against. The model is
  * instructed to use conditional components only when the message actually
  * calls for them, never to force them in (e.g. never append "For your kind
- * consideration, Sir." to a message that isn't a request).
+ * info, sir." to a message that's a bare acknowledgement).
+ *
+ * Closing-line policy: this file's `closings` guidance is the AI's first
+ * pass only. The AUTHORITATIVE, guaranteed-correct pass is deterministic —
+ * see whatsappClosing.ts's applyClosingLine(), run on every WhatsApp-mode AI
+ * response in ai/state.ts's REQUEST_SUCCESS — which classifies the
+ * message's intent itself and corrects/inserts/removes the closing line
+ * regardless of what the AI produced, per the "For your kind..." closing
+ * line spec this was built against.
  */
 
 export type OutputMode = "text" | "whatsapp";
@@ -27,7 +35,8 @@ export const WHATSAPP_STYLE = {
     greeting:
       "Open with a greeting to the recipient, e.g. 'Assalamualaikum Sir,' (or whatever greeting form the user's own draft already uses — preserve their spelling/punctuation of it rather than normalizing it). Only default to 'Assalamualaikum Sir,' when generating from scratch with no greeting supplied.",
     body: "A concise, direct, professional, respectful main body. Information-dense, no filler conversational language ('I hope this message finds you well', 'I just wanted to reach out', etc.).",
-    closing: "Some closing — see `closings` below for which one fits the message's purpose. Never omit a closing entirely, but never pad with more than one.",
+    closing:
+      "A closing appropriate to the message's purpose — see `closings` below. 'Regards' by itself is always the final line; when one of the three 'For your kind...' lines applies (see `closings`), it goes on its own line immediately before 'Regards', never after it and never mid-message. Never omit 'Regards', and never include more than one 'For your kind...' line.",
   },
   conditional: {
     numbering:
@@ -39,10 +48,17 @@ export const WHATSAPP_STYLE = {
     signature: "A sign-off name/initials/rank AFTER 'Regards' — only include this if the user has provided one; see `signature` handling below.",
   },
   closings: {
-    request:
-      "For a message asking for a decision, approval, or permission, close with a request-appropriate line before 'Regards' — e.g. 'For your kind consideration, Sir.' for something needing thought/review, or 'For your kind permission, Sir.' for something needing explicit authorization.",
-    information: "For a message that's purely informational (a status update, an FYI, an answer to a question) a bare 'Regards' is enough — do not add a request-style line to an information-only message.",
-    rule: "Pick the closing based on what the message is actually doing, not by default. Never mechanically append 'For your kind consideration, Sir.' to every message.",
+    info: "If the message is reporting, informing, or updating the recipient (a status report, an FYI, a completed/ongoing event, an answer that isn't itself a request) close with exactly: 'For your kind info, sir.' immediately before 'Regards'.",
+    permission:
+      "If the message is asking the recipient to grant, authorize, or permit something (movement, leave, attendance, use of a resource, or a proposed action awaiting explicit go-ahead) close with exactly: 'For your kind permission, sir.' immediately before 'Regards'.",
+    consideration:
+      "If the message is asking for the recipient's opinion, view, decision, or consideration of a proposal/request/option close with exactly: 'For your kind consideration, sir.' immediately before 'Regards'.",
+    priority:
+      "When a message could plausibly read as more than one of these, decide by its overall purpose, not an isolated keyword, using this priority: permission first, then consideration, then info.",
+    omission:
+      "Some messages genuinely need none of these — a bare acknowledgement, a greeting, 'Noted, sir.', 'Received, sir.', a very short reply. Do not add a request-style closing line to a message like that.",
+    exactWording:
+      "Use exactly one of the three phrases above, worded exactly as shown (lowercase 'sir'; 'info', never 'information'; 'consideration', never 'opinion', for the opinion/decision case). Never use more than one closing line, and never place it after 'Regards' or in the middle of the message.",
   },
   toneNotes: [
     "Concise military communication, not extreme SMS-shorthand — the samples read as something a serving officer would actually type on WhatsApp, not a chat abbreviation dump.",
@@ -75,7 +91,9 @@ export function buildWhatsAppGuidance(signature?: string): string {
     "Use only where it genuinely applies — do not force these in: " +
       c.numbering + " " + c.eventHeading + " " + c.timeFormat,
   );
-  lines.push("Choosing the closing: " + cl.request + " " + cl.information + " " + cl.rule);
+  lines.push(
+    "Choosing the closing: " + cl.info + " " + cl.permission + " " + cl.consideration + " " + cl.priority + " " + cl.omission + " " + cl.exactWording,
+  );
   lines.push(...WHATSAPP_STYLE.toneNotes);
   lines.push(
     signature && signature.trim()

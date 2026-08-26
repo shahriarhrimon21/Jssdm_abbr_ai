@@ -11,10 +11,20 @@ test("buildWhatsAppGuidance mentions the mandatory structural elements", () => {
   assert.match(g, /Regards/);
 });
 
-test("buildWhatsAppGuidance never forces the event-heading or request-closing components", () => {
+test("buildWhatsAppGuidance never forces the event-heading or a closing line", () => {
   const g = buildWhatsAppGuidance();
   assert.match(g, /do not add an event heading/i);
-  assert.match(g, /do not add a request-style line/i);
+  assert.match(g, /do not add a request-style closing line/i);
+});
+
+test("buildWhatsAppGuidance describes all three closing phrases with exact required wording, in priority order", () => {
+  const g = buildWhatsAppGuidance();
+  assert.match(g, /For your kind info, sir\./);
+  assert.match(g, /For your kind permission, sir\./);
+  assert.match(g, /For your kind consideration, sir\./);
+  assert.match(g, /permission first, then consideration, then info/i);
+  assert.doesNotMatch(g, /For your kind information, sir/i, "must never use the disallowed 'information' wording");
+  assert.doesNotMatch(g, /For your kind opinion, sir/i, "must never use the disallowed 'opinion' wording");
 });
 
 test("buildWhatsAppGuidance instructs never to invent facts", () => {

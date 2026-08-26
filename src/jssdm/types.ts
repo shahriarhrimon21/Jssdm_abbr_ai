@@ -42,9 +42,13 @@ export interface Entry {
    *  winner (a genuine tie, e.g. Record: RO vs rec). */
   reverseTied?: boolean;
 
-  /** Present on some notation-expansion variants; carried through unused by
-   *  engine logic but preserved from the source dataset. */
-  originalEntry?: string;
+  /** Present on "variation"/"positional"/"shared-prefix"-notation entries
+   *  that were expanded from one combined manual listing (e.g. "Vehicle/
+   *  Vehicular" -> two entries) — the source listing this entry was split
+   *  from. Was mistyped as `string`; the dataset actually stores an object.
+   *  Now read by database.ts's index-build audit (see the comment there) to
+   *  detect and exclude a specific class of incomplete-split entries. */
+  originalEntry?: { full: string; abbr: string };
   quantity?: string;
   symbol?: string;
   tier?: number;
