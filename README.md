@@ -47,17 +47,22 @@ src/
   components/             shared UI pieces
   pages/                  one component per sidebar view
   App.tsx, main.tsx, nav.ts, styles/app.css
-server/ai/
-  handler.ts               the ONLY place any AI API key is read — the
-                            actual request validation + provider dispatch
-                            logic, platform-agnostic (Web-standard
-                            Request/Response only), shared by both hosts
-  providers/                one file per AI provider (groq, gemini, openai
-                             implemented — groq is free/default; claude
-                             scaffolded for later)
-netlify/functions/ai.ts   Netlify's entry point — re-exports server/ai/handler.ts
-api/ai.ts                 Vercel's entry point (Edge Function) — re-exports
-                           the same server/ai/handler.ts
+api/
+  ai.ts                    Vercel's entry point (Edge Function) — re-exports
+                            the shared handler below
+  _lib/
+    handler.ts               the ONLY place any AI API key is read — the
+                              actual request validation + provider dispatch
+                              logic, platform-agnostic (Web-standard
+                              Request/Response only), shared by both hosts.
+                              Lives under api/ (not a project-root folder)
+                              specifically so Vercel's Edge Function bundler
+                              can trace it — the underscore prefix keeps
+                              Vercel's router from treating it as a route
+    providers/                 one file per AI provider (groq, gemini,
+                                openai implemented — groq is free/default;
+                                claude scaffolded for later)
+netlify/functions/ai.ts   Netlify's entry point — re-exports api/_lib/handler.ts
 vercel.json                build settings + the rewrite that points the
                             frontend's hardcoded fetch path at api/ai.ts
 ```
@@ -71,7 +76,7 @@ npm run dev          # Vite dev server (JSSDM engine works with no key)
 
 To exercise the AI Writing Assistant locally you need a serverless-function
 dev server, since the AI call doesn't work against plain `vite dev` alone.
-Either CLI works — both run the exact same `server/ai/handler.ts`:
+Either CLI works — both run the exact same `api/_lib/handler.ts`:
 
 ```bash
 # Netlify CLI
@@ -212,13 +217,13 @@ no-card working option, and OpenAI as a paid fallback, both added after
 Google's Gemini key rollout issues made Gemini alone unreliable; together
 they're proof the provider abstraction works as intended. If you want to
 add a fourth (e.g. Claude, already scaffolded in
-`server/ai/providers/claude.ts`), it's finishing that file's `call()`
+`api/_lib/providers/claude.ts`), it's finishing that file's `call()`
 method following the same interface as `gemini.ts`/`openai.ts`/`groq.ts`,
 its own `*_API_KEY` environment variable set on whichever host(s) you
 deploy to, and one line in the AI Writing Assistant's provider dropdown
 (`src/pages/AIWritingAssistant.tsx`) — the request contract from the
 browser does not change, and it takes effect on both Netlify and Vercel
-automatically since both hosts call the same `server/ai/handler.ts`.
+automatically since both hosts call the same `api/_lib/handler.ts`.
 
 ## Deploying to Vercel instead
 
@@ -277,7 +282,7 @@ honest, so here is exactly what was and wasn't verified, and how:
 - The AI Writing Assistant's state reducer (`src/ai/state.ts`) — 4
   regression tests confirming the three text states (Original/AI
   Final/JSSDM Final) never overwrite each other.
-- The AI proxy (`server/ai/handler.ts`), for the Groq, Gemini, and OpenAI
+- The AI proxy (`api/_lib/handler.ts`), for the Groq, Gemini, and OpenAI
   providers — invoked directly with real `Request` objects through both
   hosts' entry points: correctly rejects non-POST, malformed JSON, and
   missing fields; correctly reports "not configured" with no key set; fails
