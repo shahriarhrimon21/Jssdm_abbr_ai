@@ -1,0 +1,8 @@
+{
+  "buildCommand": "npm run build",
+  "outputDirectory": "dist",
+  "rewrites": [
+    { "source": "/.netlify/functions/ai", "destination": "/api/ai" },
+    { "source": "/((?!api/).*)", "destination": "/index.html" }
+  ]
+}

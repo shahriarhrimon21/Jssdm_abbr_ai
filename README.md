@@ -10,7 +10,9 @@ counts as an authorized abbreviation.
 
 This is a React + Vite + TypeScript rewrite of an earlier single-file
 prototype, restructured so the AI provider's API key lives only on the
-server (a Netlify Function) and is never shipped to the browser.
+server (a serverless function) and is never shipped to the browser. The
+app deploys to **either Netlify or Vercel** — same repo, same code, no
+choice to make up front; see "Deploying" below for both.
 
 ## Project layout
 
@@ -35,18 +37,29 @@ src/
     data/dataset.json        the extracted JSSDM dataset (3,062 entries)
     __tests__/               regression suite (node:test)
   ai/                     AI Writing Assistant client-side logic
-    client.ts                calls this app's own Netlify Function only
+    client.ts                always POSTs to "/.netlify/functions/ai" —
+                              on Vercel, vercel.json rewrites that same
+                              path to /api/ai, so this file never needs to
+                              know which host it's running on
     prompts.ts                system prompts, tone list
     state.ts                  reducer for the 3-state text model
     __tests__/
   components/             shared UI pieces
   pages/                  one component per sidebar view
   App.tsx, main.tsx, nav.ts, styles/app.css
-netlify/functions/
-  ai.ts                   the ONLY place any AI API key is read
-  providers/               one file per AI provider (groq, gemini, openai
-                            implemented — groq is free/default; claude
-                            scaffolded for later)
+server/ai/
+  handler.ts               the ONLY place any AI API key is read — the
+                            actual request validation + provider dispatch
+                            logic, platform-agnostic (Web-standard
+                            Request/Response only), shared by both hosts
+  providers/                one file per AI provider (groq, gemini, openai
+                             implemented — groq is free/default; claude
+                             scaffolded for later)
+netlify/functions/ai.ts   Netlify's entry point — re-exports server/ai/handler.ts
+api/ai.ts                 Vercel's entry point (Edge Function) — re-exports
+                           the same server/ai/handler.ts
+vercel.json                build settings + the rewrite that points the
+                            frontend's hardcoded fetch path at api/ai.ts
 ```
 
 ## Local development
@@ -56,13 +69,20 @@ npm install
 npm run dev          # Vite dev server (JSSDM engine works with no key)
 ```
 
-To exercise the AI Writing Assistant locally you need the Netlify CLI,
-since the AI call goes through a serverless function:
+To exercise the AI Writing Assistant locally you need a serverless-function
+dev server, since the AI call doesn't work against plain `vite dev` alone.
+Either CLI works — both run the exact same `server/ai/handler.ts`:
 
 ```bash
+# Netlify CLI
 npm install -g netlify-cli
 cp .env.example .env         # then put your real key in .env
 netlify dev                  # serves the app AND the function together
+
+# — or — Vercel CLI
+npm install -g vercel
+cp .env.example .env.local   # Vercel's CLI reads .env.local, not .env
+vercel dev                   # serves the app AND the function together
 ```
 
 `.env` is gitignored — it never gets committed.
@@ -192,12 +212,50 @@ no-card working option, and OpenAI as a paid fallback, both added after
 Google's Gemini key rollout issues made Gemini alone unreliable; together
 they're proof the provider abstraction works as intended. If you want to
 add a fourth (e.g. Claude, already scaffolded in
-`netlify/functions/providers/claude.ts`), it's finishing that file's
-`call()` method following the same interface as `gemini.ts`/`openai.ts`/
-`groq.ts`, its own `*_API_KEY` environment variable in Netlify, and one
-line in the AI Writing Assistant's provider dropdown
-(`src/pages/AIWritingAssistant.tsx`) — the request contract to
-`/.netlify/functions/ai` does not change.
+`server/ai/providers/claude.ts`), it's finishing that file's `call()`
+method following the same interface as `gemini.ts`/`openai.ts`/`groq.ts`,
+its own `*_API_KEY` environment variable set on whichever host(s) you
+deploy to, and one line in the AI Writing Assistant's provider dropdown
+(`src/pages/AIWritingAssistant.tsx`) — the request contract from the
+browser does not change, and it takes effect on both Netlify and Vercel
+automatically since both hosts call the same `server/ai/handler.ts`.
+
+## Deploying to Vercel instead
+
+Everything in Steps 1-4 above (GitHub account, empty repo, upload the
+project) is identical for Vercel — only Steps 5-6 change:
+
+**Step 5 — Connect Vercel.**
+Go to [vercel.com](https://vercel.com) and sign up/log in with **Continue
+with GitHub**. Then: **Add New... → Project**, pick the repo you created,
+and click **Import**. Vercel auto-detects this as a Vite project and reads
+`vercel.json` for the build settings and the routing rule that makes the
+AI feature work — just click **Deploy**.
+
+**Step 6 — Add your (free) AI API key.**
+Same idea as Netlify, but Vercel keeps its own separate environment
+variables — a key added on Netlify does NOT carry over to Vercel, and
+vice versa. If you're deploying to Vercel only, do this instead of
+Netlify's Step 6; if you're running both, you'll add the key twice (once
+per host):
+- Get a free Groq key at
+  [console.groq.com/keys](https://console.groq.com/keys) (no payment info
+  requested).
+- In your Vercel project: **Settings → Environment Variables → Add New**.
+  - Key: `GROQ_API_KEY`
+  - Value: the key you just copied
+  - Environment: leave all three (Production/Preview/Development) checked.
+
+Click **Save**, then go to the **Deployments** tab → open the latest
+deployment's **⋯** menu → **Redeploy**, so the AI feature picks up the new
+key. Gemini (`GEMINI_API_KEY`) and OpenAI (`OPENAI_API_KEY`) work the same
+way, added the same way, exactly as described in Netlify's Step 8 above.
+
+Vercel gives you a web address like `your-project-name.vercel.app` — that
+works identically to a Netlify URL, including the AI Writing Assistant.
+Future updates work the same way too: push updated files to the same
+GitHub repo (drag-and-drop or `git push`) and Vercel redeploys
+automatically, just like Netlify does.
 
 ## Verification status (read this before trusting "it works")
 
@@ -219,13 +277,17 @@ honest, so here is exactly what was and wasn't verified, and how:
 - The AI Writing Assistant's state reducer (`src/ai/state.ts`) — 4
   regression tests confirming the three text states (Original/AI
   Final/JSSDM Final) never overwrite each other.
-- The Netlify Function (`netlify/functions/ai.ts`), for the Groq, Gemini,
-  and OpenAI providers — invoked directly with real `Request` objects:
-  correctly rejects non-POST, malformed JSON, and missing fields; correctly
-  reports "not configured" with no key set; and fails gracefully (no stack
-  trace, no key ever in the response) when a key is set but the upstream
-  call itself fails. 9 regression tests in
-  `netlify/functions/__tests__/ai.test.ts`.
+- The AI proxy (`server/ai/handler.ts`), for the Groq, Gemini, and OpenAI
+  providers — invoked directly with real `Request` objects through both
+  hosts' entry points: correctly rejects non-POST, malformed JSON, and
+  missing fields; correctly reports "not configured" with no key set; fails
+  gracefully (no stack trace, no key ever in the response) when a key is
+  set but the upstream call itself fails; and (regression coverage for a
+  bug that shipped once) a real WhatsApp-mode system prompt never trips the
+  size guard. 13 regression tests across
+  `netlify/functions/__tests__/ai.test.ts` and `api/__tests__/ai.test.ts`
+  (the latter confirms Vercel's entry point re-exports the identical
+  handler rather than a stale duplicate).
 - Every React component (all 19: `App` and every page/shared component) —
   server-rendered via `react-dom/server` (`scripts/verify-render.tsx`,
   run with `tsx`, using this environment's pre-installed global `react`/
