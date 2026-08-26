@@ -12,7 +12,11 @@
  */
 import type { AIProvider, ProviderRequest, ProviderResult, ChatMessage } from "./types.ts";
 
-const DEFAULT_MODEL = "llama-3.3-70b-versatile";
+// Groq retires/renames models fairly often. If you ever see "the model
+// does not exist or you do not have access to it", check
+// https://console.groq.com/docs/models for the current catalog and set
+// GROQ_MODEL in Netlify to override this default without a code change.
+const DEFAULT_MODEL = "openai/gpt-oss-120b";
 
 function toGroqMessages(systemPrompt: string, messages: ChatMessage[]) {
   return [{ role: "system", content: systemPrompt }, ...messages.map((m) => ({ role: m.role, content: m.content }))];
