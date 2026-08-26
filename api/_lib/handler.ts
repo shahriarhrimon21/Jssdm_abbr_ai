@@ -2,25 +2,26 @@
  * The AI proxy's actual implementation — request validation, provider
  * dispatch, and error shaping. This file is platform-agnostic: it only
  * uses the Web-standard Request/Response objects and process.env, both of
- * which work unmodified on Netlify Functions, Vercel Edge Functions, and
- * Vercel's Node.js serverless functions. It has no hosting-platform import
- * anywhere in it.
+ * which work unmodified on Netlify Functions and Vercel's Node.js
+ * serverless functions (which is what api/ai.ts runs as — see that file's
+ * header for why it's Node rather than Edge). It has no hosting-platform
+ * import anywhere in it.
  *
- * Lives at api/_lib/ (not a project-root server/ folder, and not directly
- * under api/) for a Vercel-specific reason: Vercel's Edge Function bundler
- * failed an early build of this app with "referencing unsupported modules"
- * when this file lived outside the api/ directory (api/ai.ts importing
- * ../server/ai/handler.ts) — Edge Function bundling doesn't reliably trace
- * local modules outside api/. Nesting it under api/_lib/ keeps it inside
- * Vercel's bundling scope while the leading underscore keeps Vercel's
- * filesystem router from treating it as a route of its own (Vercel's own
- * documented convention for shared/helper code under api/).
+ * Lives at api/_lib/ (not a project-root server/ folder) so it sits
+ * next to the Vercel entry point that uses it; the leading underscore
+ * keeps Vercel's filesystem router from treating it as a route of its own
+ * (Vercel's own documented convention for shared/helper code under api/).
+ * This location was originally chosen to work around an Edge Function
+ * bundling limitation that turned out to need a different fix entirely
+ * (see api/ai.ts) — kept here since there's no longer a reason to move it.
  *
- * Both host entry points are thin re-exports of this file's default export:
- *   - netlify/functions/ai.ts  (Netlify calls this at /.netlify/functions/ai)
- *   - api/ai.ts                (Vercel calls this at /api/ai)
- * That keeps exactly one implementation instead of two copies that can
- * drift apart — see either entry file's comment for why two hosts exist.
+ * netlify/functions/ai.ts (Netlify's entry point, called at
+ * /.netlify/functions/ai) is a thin re-export of this file's default
+ * export; api/ai.ts (Vercel's entry point, called at /api/ai) wraps it in
+ * a small (req,res)->Request/Response adapter, since Node.js Functions
+ * don't speak the Web Request/Response API directly. Either way, this
+ * file is the ONLY implementation — see both entry files' comments for
+ * the full picture of why two hosts exist and how each one calls in.
  *
  * Request body: { provider?: "gemini", systemPrompt: string,
  *                  messages: {role:"user"|"assistant", content:string}[],

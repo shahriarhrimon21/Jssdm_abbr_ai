@@ -48,16 +48,22 @@ src/
   pages/                  one component per sidebar view
   App.tsx, main.tsx, nav.ts, styles/app.css
 api/
-  ai.ts                    Vercel's entry point (Edge Function) — re-exports
-                            the shared handler below
+  ai.ts                    Vercel's entry point (Node.js Serverless
+                            Function) — a small (req,res) adapter around
+                            the shared handler below (Vercel's Node
+                            runtime doesn't speak Web Request/Response
+                            directly the way Netlify's function format
+                            and Vercel's Edge runtime do; Edge itself
+                            turned out not to reliably bundle a local
+                            multi-file TS import, hence Node here instead)
   _lib/
     handler.ts               the ONLY place any AI API key is read — the
                               actual request validation + provider dispatch
                               logic, platform-agnostic (Web-standard
                               Request/Response only), shared by both hosts.
                               Lives under api/ (not a project-root folder)
-                              specifically so Vercel's Edge Function bundler
-                              can trace it — the underscore prefix keeps
+                              so it sits next to the Vercel entry point
+                              that uses it — the underscore prefix keeps
                               Vercel's router from treating it as a route
     providers/                 one file per AI provider (groq, gemini,
                                 openai implemented — groq is free/default;
@@ -283,16 +289,18 @@ honest, so here is exactly what was and wasn't verified, and how:
   regression tests confirming the three text states (Original/AI
   Final/JSSDM Final) never overwrite each other.
 - The AI proxy (`api/_lib/handler.ts`), for the Groq, Gemini, and OpenAI
-  providers — invoked directly with real `Request` objects through both
-  hosts' entry points: correctly rejects non-POST, malformed JSON, and
-  missing fields; correctly reports "not configured" with no key set; fails
-  gracefully (no stack trace, no key ever in the response) when a key is
-  set but the upstream call itself fails; and (regression coverage for a
-  bug that shipped once) a real WhatsApp-mode system prompt never trips the
-  size guard. 13 regression tests across
-  `netlify/functions/__tests__/ai.test.ts` and `api/__tests__/ai.test.ts`
-  (the latter confirms Vercel's entry point re-exports the identical
-  handler rather than a stale duplicate).
+  providers — invoked directly with real `Request` objects (Netlify's entry
+  point, and Vercel's shared handler underneath its req/res adapter):
+  correctly rejects non-POST, malformed JSON, and missing fields; correctly
+  reports "not configured" with no key set; fails gracefully (no stack
+  trace, no key ever in the response) when a key is set but the upstream
+  call itself fails; and (regression coverage for a bug that shipped once)
+  a real WhatsApp-mode system prompt never trips the size guard. Separately,
+  Vercel's `api/ai.ts` req/res adapter is tested against a mock response
+  object to confirm it correctly translates Vercel's (req, res) call shape
+  into the Request the shared handler expects and relays its Response back
+  correctly (status, headers, body). 15 regression tests total across
+  `netlify/functions/__tests__/ai.test.ts` and `api/__tests__/ai.test.ts`.
 - Every React component (all 19: `App` and every page/shared component) —
   server-rendered via `react-dom/server` (`scripts/verify-render.tsx`,
   run with `tsx`, using this environment's pre-installed global `react`/

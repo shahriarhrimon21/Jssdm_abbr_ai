@@ -1,23 +1,90 @@
 /**
- * Guards the Vercel entry point's wiring — not its request-handling logic
- * (that's already fully covered by netlify/functions/__tests__/ai.test.ts,
- * since both entry points re-export the exact same function from
- * ../_lib/handler.ts). What's specific to this file is: does it actually
- * export that same handler (not a stale copy), and does it declare the
- * Edge runtime Vercel needs to run a Web-standard Request/Response handler
- * unmodified.
+ * Guards the Vercel entry point's (req,res)->Request/Response adapter
+ * (api/ai.ts). The request-handling logic itself is already fully covered
+ * by netlify/functions/__tests__/ai.test.ts, since both entry points call
+ * the exact same ../_lib/handler.ts — what's specific to this file is
+ * whether the adapter correctly translates a Vercel-shaped (req, res) call
+ * into the Request the shared handler expects, and its Response back into
+ * the res.status()/setHeader()/send() calls Vercel's Node runtime needs.
+ *
+ * mockRes() below stands in for the real Vercel ServerResponse-like object
+ * (status/setHeader/send) — this test never imports @vercel/node, so the
+ * project needs no new dependency just to exercise this file.
  */
 import test from "node:test";
 import assert from "node:assert/strict";
-import vercelHandler, { config } from "../ai.ts";
-import netlifyHandler from "../../netlify/functions/ai.ts";
-import sharedHandler from "../_lib/handler.ts";
+import handler from "../ai.ts";
 
-test("api/ai.ts exports the exact same handler function as the Netlify entry point and the shared implementation (no duplicate/stale copy)", () => {
-  assert.equal(vercelHandler, sharedHandler);
-  assert.equal(netlifyHandler, sharedHandler);
+function mockRes() {
+  const state: { statusCode: number; headers: Record<string, string>; body: string } = {
+    statusCode: 0,
+    headers: {},
+    body: "",
+  };
+  const res = {
+    status(code: number) {
+      state.statusCode = code;
+      return res;
+    },
+    setHeader(key: string, value: string) {
+      state.headers[key] = value;
+    },
+    send(body: string) {
+      state.body = body;
+    },
+  };
+  return { res, state };
+}
+
+test("api/ai.ts adapter: rejects a GET request the same way the shared handler does (405)", async () => {
+  const { res, state } = mockRes();
+  await handler({ method: "GET", url: "/api/ai", headers: { host: "localhost" } }, res);
+  assert.equal(state.statusCode, 405);
+  assert.equal(JSON.parse(state.body).ok, false);
 });
 
-test("api/ai.ts declares the Edge runtime, so the shared handler's Web-standard Request/Response usage runs unmodified", () => {
-  assert.equal(config.runtime, "edge");
+test("api/ai.ts adapter: forwards a POST body to the shared handler and relays its response (missing systemPrompt -> 400)", async () => {
+  const { res, state } = mockRes();
+  await handler(
+    {
+      method: "POST",
+      url: "/api/ai",
+      headers: { host: "localhost", "content-type": "application/json" },
+      body: { provider: "gemini", messages: [{ role: "user", content: "hi" }] }, // no systemPrompt
+    },
+    res,
+  );
+  assert.equal(state.statusCode, 400);
+  const data = JSON.parse(state.body);
+  assert.equal(data.ok, false);
+  assert.match(data.error, /systemPrompt/);
+});
+
+test("api/ai.ts adapter: a well-formed request reaches the provider-configured check (503, not rejected earlier)", async () => {
+  const prevKey = process.env.GEMINI_API_KEY;
+  delete process.env.GEMINI_API_KEY;
+  try {
+    const { res, state } = mockRes();
+    await handler(
+      {
+        method: "POST",
+        url: "/api/ai",
+        headers: { host: "localhost", "content-type": "application/json" },
+        body: { provider: "gemini", systemPrompt: "You are a helpful assistant.", messages: [{ role: "user", content: "hi" }] },
+      },
+      res,
+    );
+    assert.equal(state.statusCode, 503);
+    const data = JSON.parse(state.body);
+    assert.equal(data.ok, false);
+    assert.match(data.error, /Gemini/);
+  } finally {
+    if (prevKey !== undefined) process.env.GEMINI_API_KEY = prevKey;
+  }
+});
+
+test("api/ai.ts adapter: response headers from the shared handler are relayed (Content-Type)", async () => {
+  const { res, state } = mockRes();
+  await handler({ method: "GET", url: "/api/ai", headers: { host: "localhost" } }, res);
+  assert.equal(state.headers["content-type"], "application/json");
 });
