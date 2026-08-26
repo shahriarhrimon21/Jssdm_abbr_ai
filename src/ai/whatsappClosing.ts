@@ -41,7 +41,7 @@ const REGARDS_RE = /^\s*regards\.?\s*$/i;
  *  "Assalamualaikum Sir,") a short line ending in a comma, since that's how
  *  a salutation addressed to the recipient conventionally reads in this
  *  message style. Only ever applied to the first body line. */
-function isGreetingLine(line: string): boolean {
+export function isGreetingLine(line: string): boolean {
   const t = line.trim();
   if (!t) return false;
   if (/^(assalamualaikum|salam|dear|good\s+(morning|afternoon|evening|day)|hi|hello)\b/i.test(t)) return true;
@@ -159,4 +159,38 @@ export function applyClosingLine(message: string): string {
   }
   out.splice(insertAt, 0, "", correctLine);
   return out.join("\n");
+}
+
+/**
+ * Guarantees exactly one blank line between the greeting and the body,
+ * mechanically rather than by asking the AI nicely — the style guide
+ * (whatsappStyle.ts) has always described this shape in its worked
+ * examples, but never stated it as a rule, so the model followed it
+ * inconsistently. Companion to applyClosingLine above: same idea (a
+ * deterministic pass beats a prompt instruction for anything that can be
+ * decided mechanically), a different, non-overlapping part of the
+ * message — this only ever touches the first couple of lines, never the
+ * closing/"Regards" region applyClosingLine owns.
+ *
+ * Idempotent, and a no-op on anything that isn't a real greeting-first
+ * message: a message with only one line, or whose first line isn't
+ * recognized as a greeting (isGreetingLine — the AI didn't produce one,
+ * or the user's own draft never had one to preserve), is returned
+ * unchanged rather than guessed at.
+ */
+export function ensureGreetingBlankLine(message: string): string {
+  if (message == null) return message;
+  if (!message.trim()) return message;
+
+  const lines = message.split(/\r?\n/);
+  if (lines.length < 2 || !isGreetingLine(lines[0])) return message;
+
+  // Collapse any existing run of blank lines right after the greeting
+  // (zero, one, or several) down to exactly one.
+  let i = 1;
+  while (i < lines.length && lines[i].trim() === "") i++;
+  const rest = lines.slice(i);
+  if (rest.length === 0) return message; // a greeting-only message has nothing to separate
+
+  return [lines[0], "", ...rest].join("\n");
 }

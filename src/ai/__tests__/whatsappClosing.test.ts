@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { classifyClosingIntent, applyClosingLine, CLOSING_LINES } from "../whatsappClosing.ts";
+import { classifyClosingIntent, applyClosingLine, ensureGreetingBlankLine, CLOSING_LINES } from "../whatsappClosing.ts";
 
 /* ---- classifyClosingIntent: the worked examples from the request itself ---- */
 
@@ -166,4 +166,37 @@ test("applyClosingLine handles the mixed-intent example correctly (Test 7)", () 
   const input = "Assalamualaikum sir,\nThe programme has been rescheduled to tomorrow. May I kindly be permitted to attend?\nRegards";
   const out = applyClosingLine(input);
   assert.match(out, /For your kind permission, sir\.\nRegards$/);
+});
+
+/* ---- ensureGreetingBlankLine ---- */
+
+test("ensureGreetingBlankLine inserts a blank line when the AI ran the greeting straight into the body", () => {
+  const out = ensureGreetingBlankLine("Assalamualaikum Sir,\nThe patrol has reached the location.\nRegards");
+  assert.equal(out, "Assalamualaikum Sir,\n\nThe patrol has reached the location.\nRegards");
+});
+
+test("ensureGreetingBlankLine collapses several blank lines after the greeting down to exactly one", () => {
+  const out = ensureGreetingBlankLine("Assalamualaikum Sir,\n\n\n\nThe patrol has reached the location.\nRegards");
+  assert.equal(out, "Assalamualaikum Sir,\n\nThe patrol has reached the location.\nRegards");
+});
+
+test("ensureGreetingBlankLine is a no-op when exactly one blank line is already there", () => {
+  const input = "Assalamualaikum Sir,\n\nThe patrol has reached the location.\nRegards";
+  assert.equal(ensureGreetingBlankLine(input), input);
+});
+
+test("ensureGreetingBlankLine does nothing when the first line isn't a recognized greeting", () => {
+  const input = "The patrol has reached the location.\nRegards";
+  assert.equal(ensureGreetingBlankLine(input), input);
+});
+
+test("ensureGreetingBlankLine does nothing on a single-line or greeting-only message", () => {
+  assert.equal(ensureGreetingBlankLine("Noted, sir."), "Noted, sir.");
+  assert.equal(ensureGreetingBlankLine("Assalamualaikum Sir,"), "Assalamualaikum Sir,");
+});
+
+test("ensureGreetingBlankLine is idempotent", () => {
+  const once = ensureGreetingBlankLine("Assalamualaikum Sir,\nThe patrol has reached the location.\nRegards");
+  const twice = ensureGreetingBlankLine(once);
+  assert.equal(once, twice);
 });

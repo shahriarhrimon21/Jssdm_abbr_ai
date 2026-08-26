@@ -2,7 +2,8 @@ import { useMemo, useState } from "react";
 import { searchAbbrPartial, searchFullPartial } from "../jssdm/search.ts";
 import { findRuleSupportedFull } from "../jssdm/ruleEngine.ts";
 import { catList, svcList, fmtSource } from "../jssdm/database.ts";
-import { addRecent } from "../jssdm/favorites.ts";
+import { addRecent, isFavorite, toggleFavorite } from "../jssdm/favorites.ts";
+import Icon from "../components/Icon.tsx";
 import type { Entry } from "../jssdm/types.ts";
 
 function dedupe(entries: Entry[]): Entry[] {
@@ -21,9 +22,19 @@ export default function Search() {
   const [q, setQ] = useState("");
   const [category, setCategory] = useState("all");
   const [service, setService] = useState("all");
+  // isFavorite() reads localStorage directly rather than being carried in
+  // React state (favorites.ts is shared with Favorites.tsx and has no
+  // subscription mechanism of its own), so toggling a star has to force a
+  // re-render explicitly — the same pattern Favorites.tsx already uses.
+  const [, forceRerender] = useState(0);
   const categories = useMemo(() => catList(), []);
   const services = useMemo(() => svcList(), []);
   const filt = { category, service };
+
+  function star(id: number) {
+    toggleFavorite(id);
+    forceRerender((n) => n + 1);
+  }
 
   const results = useMemo(() => {
     if (!q.trim()) return [];
@@ -92,6 +103,7 @@ export default function Search() {
               <table>
                 <thead>
                   <tr>
+                    <th></th>
                     <th>Abbreviation</th>
                     <th>Full form</th>
                     <th>Category</th>
@@ -100,15 +112,28 @@ export default function Search() {
                   </tr>
                 </thead>
                 <tbody>
-                  {results.map((e) => (
-                    <tr key={e.id}>
-                      <td className="cell-abbr">{e.abbr}</td>
-                      <td>{e.full}</td>
-                      <td>{e.category}</td>
-                      <td>{e.service || "General"}</td>
-                      <td className="src">{fmtSource(e)}</td>
-                    </tr>
-                  ))}
+                  {results.map((e) => {
+                    const fav = isFavorite(e.id);
+                    return (
+                      <tr key={e.id}>
+                        <td>
+                          <button
+                            className={"star-toggle" + (fav ? " on" : "")}
+                            onClick={() => star(e.id)}
+                            aria-pressed={fav}
+                            aria-label={fav ? `Remove ${e.abbr} from favorites` : `Add ${e.abbr} to favorites`}
+                          >
+                            <Icon name="saved" size={16} />
+                          </button>
+                        </td>
+                        <td className="cell-abbr">{e.abbr}</td>
+                        <td>{e.full}</td>
+                        <td>{e.category}</td>
+                        <td>{e.service || "General"}</td>
+                        <td className="src">{fmtSource(e)}</td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>

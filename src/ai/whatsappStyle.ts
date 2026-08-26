@@ -39,8 +39,6 @@ export const WHATSAPP_STYLE = {
       "A closing appropriate to the message's purpose — see `closings` below. 'Regards' by itself is always the final line; when one of the three 'For your kind...' lines applies (see `closings`), it goes on its own line immediately before 'Regards', never after it and never mid-message. Never omit 'Regards', and never include more than one 'For your kind...' line.",
   },
   conditional: {
-    numbering:
-      "When the message contains two or more distinct points, actions, or pieces of information, number them '1.', '2.', '3.' etc., one point per line, in the order they'd logically be read. A single-point or single-sentence message does not need numbering.",
     eventHeading:
       "For a schedule or list of timed events specifically, a short heading naming what the list is (e.g. 'Events Updt') and a date line is appropriate. Do not add an event heading or date line to a message that isn't an event/schedule list.",
     timeFormat:
@@ -59,6 +57,26 @@ export const WHATSAPP_STYLE = {
       "Some messages genuinely need none of these — a bare acknowledgement, a greeting, 'Noted, sir.', 'Received, sir.', a very short reply. Do not add a request-style closing line to a message like that.",
     exactWording:
       "Use exactly one of the three phrases above, worded exactly as shown (lowercase 'sir'; 'info', never 'information'; 'consideration', never 'opinion', for the opinion/decision case). Never use more than one closing line, and never place it after 'Regards' or in the middle of the message.",
+  },
+  /**
+   * Split out of `conditional` and given its own rendered line (see
+   * buildWhatsAppGuidance) — previously folded into one sentence together
+   * with eventHeading/timeFormat, softly worded as "use only where it
+   * applies", which the model followed inconsistently. This is still
+   * conditional (a single-point message genuinely doesn't need it), but
+   * stated as a firm rule with a worked example rather than a suggestion,
+   * since that's what actually moves compliance on formatting rules like
+   * this one.
+   */
+  numbering: {
+    rule:
+      "REQUIRED numbering: when the message body contains two or more distinct points, actions, or pieces of information, you MUST use numbered list formatting — '1.', '2.', '3.' etc., one point per line, in the order they'd logically be read — never run them together as one paragraph or separate them with commas/semicolons instead. A single-point or single-sentence message does not need numbering.",
+    example:
+      'Example — "Inform sir the patrol reached the location at 1600, there were no incidents, and the unit is awaiting further orders" has three distinct points and MUST be rendered as:\n' +
+      "1. Patrol reached the location at 1600 hrs.\n" +
+      "2. No incidents reported en route.\n" +
+      "3. Awaiting further instructions.\n" +
+      "— not as one run-on sentence.",
   },
   toneNotes: [
     "Concise military communication, not extreme SMS-shorthand — the samples read as something a serving officer would actually type on WhatsApp, not a chat abbreviation dump.",
@@ -87,10 +105,9 @@ export function buildWhatsAppGuidance(signature?: string): string {
       "not as a formal letter, an email, or generic AI prose. This is a message-composition mode, not a formatting toggle.",
   );
   lines.push("Always true for this message: " + m.greeting + " " + m.body + " " + m.closing);
-  lines.push(
-    "Use only where it genuinely applies — do not force these in: " +
-      c.numbering + " " + c.eventHeading + " " + c.timeFormat,
-  );
+  lines.push(WHATSAPP_STYLE.numbering.rule);
+  lines.push(WHATSAPP_STYLE.numbering.example);
+  lines.push("Use only where it genuinely applies — do not force these in: " + c.eventHeading + " " + c.timeFormat);
   lines.push(
     "Choosing the closing: " + cl.info + " " + cl.permission + " " + cl.consideration + " " + cl.priority + " " + cl.omission + " " + cl.exactWording,
   );

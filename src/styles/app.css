@@ -295,13 +295,29 @@ a { color: var(--ai); }
   position: relative;
 }
 .navbtn:hover { background: rgba(255, 255, 255, .07); color: var(--brand-ink); }
+/* Glass on the active item everywhere — expanded or collapsed — not just
+   the collapsed rail. The inset rule stays alongside it rather than
+   being replaced: it's what still carries the shape-signal on a
+   full-width expanded row, where a blurred background alone is a
+   softer cue than the discrete floating chip the collapsed square
+   becomes below. Three redundant "this is selected" signals survive
+   either way — the rule (shape), the gold icon (colour), and
+   aria-current="page" (assistive tech) — glass is finish on top, not a
+   replacement for any of them. */
 .navbtn.active {
-  background: rgba(201, 162, 39, .17);
+  background: linear-gradient(135deg, rgba(244, 230, 192, .20), rgba(201, 162, 39, .12));
+  backdrop-filter: blur(14px) saturate(180%);
+  -webkit-backdrop-filter: blur(14px) saturate(180%);
   color: #F4E6C0;
-  box-shadow: inset 2px 0 0 var(--gold-strong);
+  box-shadow:
+    inset 2px 0 0 var(--gold-strong),
+    inset 0 1px 0 rgba(255, 255, 255, .22);
   font-weight: 600;
 }
 .navbtn.active .icon { color: var(--gold-strong); }
+@supports not (backdrop-filter: blur(1px)) {
+  .navbtn.active { background: rgba(201, 162, 39, .17); }
+}
 /* Collapsed: a fixed square centred in the rail, not a full-width bar.
    The active/hover background — including the glass chip below — is
    this button's own box, so a square button is what makes that
@@ -731,6 +747,20 @@ td { padding: 10px var(--s3); border-bottom: 1px solid var(--line); vertical-ali
 tr:last-child td { border-bottom: none; }
 .cell-abbr { font-family: "IBM Plex Mono", monospace; font-weight: 600; white-space: nowrap; }
 .src { font-size: 11.5px; color: var(--ink-2); font-family: "IBM Plex Mono", monospace; }
+
+/* Star/favorite toggle — a table-row action, so it stays small and
+   quiet until favorited, matching the muted-until-relevant treatment
+   the rest of the table furniture uses (.src, .cell-abbr). */
+.star-toggle {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 28px; height: 28px; flex: none;
+  background: transparent; border: 1px solid transparent; border-radius: var(--r-sm);
+  color: var(--ink-3); cursor: pointer;
+  transition: background-color .12s ease, color .12s ease, border-color .12s ease;
+}
+.star-toggle:hover { background: var(--surface-3); color: var(--ink); border-color: var(--line); }
+.star-toggle.on { color: var(--gold-strong); }
+.star-toggle.on:hover { background: rgba(201, 162, 39, .14); border-color: var(--gold-strong); }
 
 /* =====================================================================
    Home

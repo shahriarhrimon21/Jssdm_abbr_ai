@@ -84,7 +84,7 @@
 import type { ChatMessage } from "./client.ts";
 import type { AssistantMode } from "./prompts.ts";
 import type { OutputMode } from "./whatsappStyle.ts";
-import { applyClosingLine } from "./whatsappClosing.ts";
+import { applyClosingLine, ensureGreetingBlankLine } from "./whatsappClosing.ts";
 import type { Span } from "../jssdm/types.ts";
 
 export interface AssistantState {
@@ -191,16 +191,22 @@ export function assistantReducer(state: AssistantState, action: AssistantAction)
       // allowed to overwrite them (see the file header and Part 6/10 of the
       // editing-workflow spec this was built against).
       //
-      // WhatsApp-mode only: run the deterministic closing-line policy
+      // WhatsApp-mode only: run two deterministic formatting passes
       // (whatsappClosing.ts) on the AI's text before it ever reaches the
-      // screen, guaranteeing "For your kind info/permission/consideration,
-      // sir." is present, correct, non-duplicated, and immediately before
-      // "Regards" whenever the message's own content calls for it — without
-      // relying on the AI having gotten it right. This runs once, here, at
-      // generation time only; it is never re-run just because the user
-      // edits the box afterward (SET_AI_EDITED_DRAFT below never calls it),
-      // so a deliberate manual edit or removal of the line is respected.
-      const text = state.outputMode === "whatsapp" ? applyClosingLine(action.text) : action.text;
+      // screen, rather than trusting the AI to have gotten either right:
+      //  - applyClosingLine guarantees "For your kind info/permission/
+      //    consideration, sir." is present, correct, non-duplicated, and
+      //    immediately before "Regards" whenever the message's own content
+      //    calls for it.
+      //  - ensureGreetingBlankLine guarantees exactly one blank line
+      //    between the greeting and the body — previously only shown by
+      //    example in the style guide, never enforced, so it was
+      //    inconsistent.
+      // Both run once, here, at generation time only; neither is re-run
+      // just because the user edits the box afterward (SET_AI_EDITED_DRAFT
+      // below never calls them), so a deliberate manual edit or removal is
+      // respected.
+      const text = state.outputMode === "whatsapp" ? ensureGreetingBlankLine(applyClosingLine(action.text)) : action.text;
       return {
         ...state,
         loading: false,

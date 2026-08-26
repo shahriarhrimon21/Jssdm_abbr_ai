@@ -223,6 +223,25 @@ export default function AIWritingAssistant({
     runAIRequest(state.finalEdited, state.chat);
   }
 
+  // Regenerate: re-sends the ORIGINAL request as a fresh ask (empty chat
+  // context, same as the very first Generate/Check & Polish) rather than as
+  // a follow-up — the point is an independent new attempt, not a revision
+  // of the last one. REQUEST_SUCCESS already resets aiEditedDraft to match
+  // whatever aiFinal comes back (see ai/state.ts), so both the "AI
+  // response" stage and the "AI-assisted draft" stage the user asked for
+  // this in both land on the new attempt with no separate reducer action
+  // needed. A lightweight native confirm only fires when there's actually
+  // something to lose — edits that differ from the current AI response —
+  // so regenerating an untouched draft is a single click, not two.
+  function regenerate() {
+    if (!state.original) return;
+    const hasEdits = state.aiEditedDraft !== null && state.aiEditedDraft !== state.aiFinal;
+    if (hasEdits && !window.confirm("This will discard your edits to the draft and get a new AI attempt. Continue?")) {
+      return;
+    }
+    runAIRequest(state.original, []);
+  }
+
   function copy(text: string, setter: (v: boolean) => void) {
     navigator.clipboard?.writeText(text).then(() => {
       setter(true);
@@ -537,6 +556,11 @@ export default function AIWritingAssistant({
                 <h4>AI response</h4>
                 <span className="stage-note">What the model returned, unedited</span>
                 <span className="spacer" />
+                <Tooltip label="Try again with a fresh AI attempt">
+                  <button className="iconbtn" onClick={regenerate} disabled={state.loading} aria-label="Regenerate AI response">
+                    <Icon name="refresh" size={16} />
+                  </button>
+                </Tooltip>
                 <button className="iconbtn" onClick={() => setShowRawAI(false)} aria-label="Collapse AI response">
                   <Icon name="collapse" size={17} />
                 </button>
@@ -574,6 +598,12 @@ export default function AIWritingAssistant({
                 <Icon name={copiedAI ? "check" : "copy"} size={15} />
                 {copiedAI ? "Copied" : "Copy"}
               </button>
+              <Tooltip label="Discard this attempt and ask StaffAI again">
+                <button className="btn secondary small" onClick={regenerate} disabled={state.loading}>
+                  <Icon name="refresh" size={15} />
+                  Regenerate
+                </button>
+              </Tooltip>
               {!hasEngineRun && saveControls}
             </div>
           </div>

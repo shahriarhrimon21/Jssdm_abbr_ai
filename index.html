@@ -15,8 +15,15 @@
       content="JSSDM ABBR StaffAI — AI-Powered Staff Work Assistant. Abbreviation, validation and staff writing grounded in JSSDM 2022."
     />
     <link rel="manifest" href="/manifest.webmanifest" />
+    <!-- Belt-and-suspenders favicon chain: the SVG (icon.svg, the same
+         simplified crest built in Stage 2A to hold its shape at small
+         sizes) is the modern, preferred icon, but a bare SVG-only favicon
+         has no fallback if a browser/OS combination doesn't render it —
+         favicon.ico (generated from the same crest, multi-resolution:
+         16/32/48/64px) is the classic universally-supported fallback. -->
+    <link rel="icon" href="/favicon.ico" sizes="32x32" />
     <link rel="icon" href="/icon.svg" type="image/svg+xml" />
-    <link rel="apple-touch-icon" href="/icon.svg" />
+    <link rel="apple-touch-icon" href="/logo-crest-240.png" />
     <meta name="theme-color" content="#0A2A1E" media="(prefers-color-scheme: light)" />
     <meta name="theme-color" content="#0B110D" media="(prefers-color-scheme: dark)" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
