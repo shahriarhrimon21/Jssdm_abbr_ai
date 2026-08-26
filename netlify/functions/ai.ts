@@ -30,7 +30,18 @@ const DEFAULT_PROVIDER = "groq";
 
 const MAX_MESSAGES = 40;
 const MAX_MESSAGE_CHARS = 12000;
-const MAX_SYSTEM_PROMPT_CHARS = 6000;
+// The rendered WhatsApp-mode system prompt (guardrail + tone + all of
+// WHATSAPP_STYLE's rendered guidance, see prompts.ts/whatsappStyle.ts) is
+// the longest system prompt this app ever sends, and it grows whenever that
+// guidance is strengthened — a prior 6000 limit left so little headroom
+// (~300 chars) that adding one firmer rule to whatsappStyle.ts tipped real
+// requests over it and produced "Missing or oversized systemPrompt." for
+// completely normal usage. This is a DoS/abuse guard, not a place to
+// micro-tune, so it's set with generous headroom above what any current
+// prompt actually renders to (see the "system prompt length" test in
+// ai.test.ts, which renders the real WhatsApp prompt and asserts it comfortably
+// clears this limit — that test is the guard against this regressing again).
+const MAX_SYSTEM_PROMPT_CHARS = 16000;
 
 function json(status: number, body: unknown): Response {
   return new Response(JSON.stringify(body), {
