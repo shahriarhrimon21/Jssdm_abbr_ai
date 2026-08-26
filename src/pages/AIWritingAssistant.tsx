@@ -4,6 +4,7 @@ import type { AssistantAction, AssistantState } from "../ai/state.ts";
 import { buildSystemPrompt, TONES } from "../ai/prompts.ts";
 import { callAI } from "../ai/client.ts";
 import { runAbbreviate } from "../jssdm/abbreviationEngine.ts";
+import { runDeabbreviate } from "../jssdm/deabbreviationEngine.ts";
 import HighlightedText from "../components/HighlightedText.tsx";
 import ForceSelect from "../components/ForceSelect.tsx";
 
@@ -35,6 +36,13 @@ function storeProvider(id: string): void {
  * survive navigating away from this page. Only genuinely transient,
  * per-mount UI state (the "Copied." flash, and the AI provider choice which
  * is already durably persisted via localStorage) stays local.
+ *
+ * Editing pipeline (see state.ts's header comment for the full rationale):
+ * AI result and JSSDM result are both editable text areas, never read-only
+ * dead ends. "Send to Abbreviation" always reads the *edited* AI draft.
+ * "Copy" always copies the *edited* final text. Nothing re-runs the engine
+ * automatically just because the user typed in the final box — only the
+ * explicit Re-abbreviate / De-abbreviate buttons do that.
  */
 export default function AIWritingAssistant({
   force,
@@ -48,7 +56,7 @@ export default function AIWritingAssistant({
   dispatch: Dispatch<AssistantAction>;
 }) {
   const [copiedAI, setCopiedAI] = useState(false);
-  const [copiedJssdm, setCopiedJssdm] = useState(false);
+  const [copiedFinal, setCopiedFinal] = useState(false);
   const [provider, setProvider] = useState(loadStoredProvider);
 
   // A stale error from a previous visit to this page is transient state,
@@ -99,10 +107,37 @@ export default function AIWritingAssistant({
     }
   }
 
-  function runJssdm() {
-    if (!state.aiFinal) return;
-    const r = runAbbreviate(state.aiFinal, force);
-    dispatch({ type: "SET_JSSDM_FINAL", text: r.output });
+  // Explicit action: send the CURRENT edited AI draft — not the original,
+  // unedited AI response — into the deterministic JSSDM engine.
+  function sendToAbbreviation() {
+    if (!state.aiEditedDraft) return;
+    const r = runAbbreviate(state.aiEditedDraft, force);
+    dispatch({ type: "JSSDM_GENERATED", text: r.output, spans: r.outSpans });
+  }
+
+  // Explicit action: re-run Abbreviate on whatever is CURRENTLY in the final
+  // editable box (which may include words the user typed in by hand after
+  // the last engine run) — never triggered automatically by typing.
+  function reabbreviate() {
+    if (!state.finalEdited) return;
+    const r = runAbbreviate(state.finalEdited, force);
+    dispatch({ type: "JSSDM_GENERATED", text: r.output, spans: r.outSpans });
+  }
+
+  // Same idea, the reverse direction.
+  function deabbreviateFinal() {
+    if (!state.finalEdited) return;
+    const r = runDeabbreviate(state.finalEdited, force);
+    dispatch({ type: "JSSDM_GENERATED", text: r.output, spans: r.outSpans });
+  }
+
+  // Takes the current final edited text back to the top as new AI input,
+  // without discarding anything already in this session — the previous
+  // chat history, AI draft, and JSSDM result all remain exactly as they
+  // were until the user explicitly runs the AI again.
+  function sendFinalToAI() {
+    if (!state.finalEdited) return;
+    dispatch({ type: "SET_DRAFT_INPUT", text: state.finalEdited });
   }
 
   function copy(text: string, setter: (v: boolean) => void) {
@@ -112,7 +147,6 @@ export default function AIWritingAssistant({
     });
   }
 
-  const jssdmSpans = state.jssdmFinal ? runAbbreviate(state.aiFinal || "", force).outSpans : [];
   const isWhatsapp = state.outputMode === "whatsapp";
 
   return (
@@ -122,7 +156,8 @@ export default function AIWritingAssistant({
           <h2>AI Writing Assistant</h2>
           <div className="view-sub">
             Helps with grammar, clarity and tone only — it never decides what's an authorized JSSDM abbreviation. Run its result through "JSSDM
-            Abbreviation" below to get a result grounded in the manual.
+            Abbreviation" below to get a result grounded in the manual. Every result along the way is yours to edit — nothing here is ever
+            permanently read-only.
           </div>
         </div>
       </div>
@@ -242,32 +277,54 @@ export default function AIWritingAssistant({
           </div>
 
           <div className="text-state-col">
-            <h4>AI Final</h4>
+            <h4>AI Result (editable — this is what gets sent to Abbreviation)</h4>
           </div>
-          <div className="text-block" style={{ marginBottom: 8 }}>
-            {state.aiFinal}
-          </div>
+          <textarea
+            id="ai-edited-draft"
+            value={state.aiEditedDraft ?? ""}
+            onChange={(e) => dispatch({ type: "SET_AI_EDITED_DRAFT", text: e.target.value })}
+            style={{ marginBottom: 8 }}
+          />
           <div className="btnrow" style={{ marginBottom: 14 }}>
-            <button className="btn small" onClick={() => copy(state.aiFinal!, setCopiedAI)}>
+            <button className="btn small" onClick={() => copy(state.aiEditedDraft || "", setCopiedAI)}>
               Copy AI result
             </button>
             {copiedAI && <span className="copyok">Copied.</span>}
-            <button className="btn secondary small" onClick={runJssdm}>
-              Run through JSSDM Abbreviation →
+            <button className="btn secondary small" onClick={sendToAbbreviation}>
+              Send to Abbreviation →
             </button>
           </div>
 
-          {state.jssdmFinal && (
+          {state.jssdmGenerated !== null && (
             <>
               <div className="text-state-col">
-                <h4>JSSDM Final</h4>
+                <h4>JSSDM Generated Result (reference — what the engine just produced)</h4>
               </div>
-              <HighlightedText text={state.jssdmFinal} spans={jssdmSpans} />
-              <div className="btnrow" style={{ marginTop: 10 }}>
-                <button className="btn small" onClick={() => copy(state.jssdmFinal!, setCopiedJssdm)}>
-                  Copy JSSDM result
+              <HighlightedText text={state.jssdmGenerated} spans={state.jssdmGeneratedSpans} />
+
+              <div className="text-state-col" style={{ marginTop: 12 }}>
+                <h4>Final Edited Result (editable — this is what Copy copies)</h4>
+              </div>
+              <textarea
+                id="final-edited"
+                value={state.finalEdited ?? ""}
+                onChange={(e) => dispatch({ type: "SET_FINAL_EDITED", text: e.target.value })}
+                style={{ marginBottom: 8 }}
+              />
+              <div className="btnrow" style={{ marginTop: 10, flexWrap: "wrap" }}>
+                <button className="btn secondary small" onClick={reabbreviate}>
+                  Re-abbreviate
                 </button>
-                {copiedJssdm && <span className="copyok">Copied.</span>}
+                <button className="btn secondary small" onClick={deabbreviateFinal}>
+                  De-abbreviate
+                </button>
+                <button className="btn small" onClick={() => copy(state.finalEdited || "", setCopiedFinal)}>
+                  Copy
+                </button>
+                {copiedFinal && <span className="copyok">Copied.</span>}
+                <button className="btn secondary small" onClick={sendFinalToAI}>
+                  Send to AI →
+                </button>
               </div>
             </>
           )}

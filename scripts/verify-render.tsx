@@ -64,7 +64,10 @@ check(
       draftInput: "let sir know troops moved",
       original: "let sir know troops moved",
       aiFinal: "Assalamualaikum Sir,\n\nTroops have moved.\n\nRegards\nBM",
-      jssdmFinal: "Assalamualaikum Sir,\n\nTps have mov.\n\nRegards\nBM",
+      aiEditedDraft: "Assalamualaikum Sir,\n\nTroops have moved successfully.\n\nRegards\nBM",
+      jssdmGenerated: "Assalamualaikum Sir,\n\nTps have mov successfully.\n\nRegards\nBM",
+      jssdmGeneratedSpans: [],
+      finalEdited: "Assalamualaikum Sir,\n\nTps have mov successfully at 0900.\n\nRegards\nBM",
       chat: [
         { role: "user", content: "let sir know troops moved" },
         { role: "assistant", content: "Assalamualaikum Sir,\n\nTroops have moved.\n\nRegards\nBM" },

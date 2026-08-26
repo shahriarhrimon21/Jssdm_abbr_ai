@@ -18,16 +18,39 @@
  * at the architecture level — no per-navigation save/restore glue needed,
  * because the state was never inside the thing that unmounts.
  *
- * Text states, per the spec, never silently overwritten:
- *   - original:    exactly what the user typed/pasted, untouched by anything.
- *   - aiFinal:      the AI's latest output (Check&Polish result, or a Generate
- *                   draft, refined further by chat follow-up). Only this field
- *                   changes when the AI responds.
- *   - jssdmFinal:   the result of running aiFinal (or original) through the
- *                   deterministic JSSDM Abbreviate engine via "Send to
- *                   Abbreviation". Only set by that explicit action, never by
- *                   the AI.
- * Each has its own Copy button in the UI; none is ever overwritten by another.
+ * FIVE distinct text states make up the pipeline, and the app never
+ * silently overwrites one of them on the user's behalf — only an explicit
+ * action (a button click, or typing directly into the field that field
+ * belongs to) ever changes it:
+ *
+ *   1. original         — exactly what the user typed/pasted to ask the AI
+ *                          for something. Set once by "Generate"/"Check &
+ *                          Polish"; never touched again.
+ *   2. aiFinal           — the AI's own output, verbatim, for this turn.
+ *                          This is what's shown/replayed in the chat log as
+ *                          "what the AI said" — it is NOT the editable box.
+ *   3. aiEditedDraft      — the user's editable working copy of the AI
+ *                          result. Starts out equal to aiFinal every time a
+ *                          new AI response arrives (REQUEST_SUCCESS), then
+ *                          the user can freely retype it — see Part 1/2 of
+ *                          the editing-workflow spec. "Send to Abbreviation"
+ *                          always reads THIS field, never aiFinal, so a
+ *                          stale/original AI response can never be sent by
+ *                          mistake once the user has edited it.
+ *   4. jssdmGenerated(+Spans) — the JSSDM engine's fresh, automatic output
+ *                          the moment it's run (Send to Abbreviation /
+ *                          Re-abbreviate / De-abbreviate). This is a
+ *                          reference value ("what the engine produced"),
+ *                          shown read-only with its highlight spans — it is
+ *                          NOT the editable box either.
+ *   5. finalEdited        — the user's editable working copy of the JSSDM
+ *                          result. Starts out equal to jssdmGenerated every
+ *                          time the engine (re)runs, then the user can
+ *                          freely retype it. The Copy button always copies
+ *                          THIS field, and nothing ever overwrites it except
+ *                          those three explicit engine actions — typing in
+ *                          this box never triggers the engine again on its
+ *                          own (Part 6: no silent re-abbreviation on edit).
  *
  * outputMode/signature are the Text vs. WhatsApp global mode and the user's
  * own (never AI-invented) sign-off — see src/ai/whatsappStyle.ts. They are
@@ -48,6 +71,7 @@
 import type { ChatMessage } from "./client.ts";
 import type { AssistantMode } from "./prompts.ts";
 import type { OutputMode } from "./whatsappStyle.ts";
+import type { Span } from "../jssdm/types.ts";
 
 export interface AssistantState {
   mode: AssistantMode;
@@ -59,7 +83,10 @@ export interface AssistantState {
   followupInput: string;
   original: string;
   aiFinal: string | null;
-  jssdmFinal: string | null;
+  aiEditedDraft: string | null;
+  jssdmGenerated: string | null;
+  jssdmGeneratedSpans: Span[];
+  finalEdited: string | null;
   chat: ChatMessage[];
   loading: boolean;
   error: string | null;
@@ -75,7 +102,10 @@ export const initialAssistantState: AssistantState = {
   followupInput: "",
   original: "",
   aiFinal: null,
-  jssdmFinal: null,
+  aiEditedDraft: null,
+  jssdmGenerated: null,
+  jssdmGeneratedSpans: [],
+  finalEdited: null,
   chat: [],
   loading: false,
   error: null,
@@ -93,7 +123,9 @@ export type AssistantAction =
   | { type: "REQUEST_START" }
   | { type: "REQUEST_SUCCESS"; text: string; userMessage: string }
   | { type: "REQUEST_ERROR"; error: string }
-  | { type: "SET_JSSDM_FINAL"; text: string }
+  | { type: "SET_AI_EDITED_DRAFT"; text: string }
+  | { type: "JSSDM_GENERATED"; text: string; spans: Span[] }
+  | { type: "SET_FINAL_EDITED"; text: string }
   | { type: "CLEAR_ERROR" }
   | { type: "RESET" };
 
@@ -118,16 +150,34 @@ export function assistantReducer(state: AssistantState, action: AssistantAction)
     case "REQUEST_START":
       return { ...state, loading: true, error: null };
     case "REQUEST_SUCCESS":
+      // A fresh AI response resets the *editable AI draft* to match it (the
+      // user would expect to see the AI's new answer, not their old edits
+      // grafted onto it) — but deliberately does NOT touch jssdmGenerated/
+      // finalEdited. Those represent a later, separate pipeline stage the
+      // user may have already hand-edited; only an explicit
+      // Send to Abbreviation / Re-abbreviate / De-abbreviate click is
+      // allowed to overwrite them (see the file header and Part 6/10 of the
+      // editing-workflow spec this was built against).
       return {
         ...state,
         loading: false,
         aiFinal: action.text,
+        aiEditedDraft: action.text,
         chat: [...state.chat, { role: "user", content: action.userMessage }, { role: "assistant", content: action.text }],
       };
     case "REQUEST_ERROR":
       return { ...state, loading: false, error: action.error };
-    case "SET_JSSDM_FINAL":
-      return { ...state, jssdmFinal: action.text };
+    case "SET_AI_EDITED_DRAFT":
+      return { ...state, aiEditedDraft: action.text };
+    case "JSSDM_GENERATED":
+      // An explicit engine run (Send to Abbreviation / Re-abbreviate /
+      // De-abbreviate) is exactly the case where resetting the editable
+      // final box to match the fresh output IS correct — the user just
+      // asked for a new one. Typing into finalEdited afterwards will never
+      // trigger this action on its own.
+      return { ...state, jssdmGenerated: action.text, jssdmGeneratedSpans: action.spans, finalEdited: action.text };
+    case "SET_FINAL_EDITED":
+      return { ...state, finalEdited: action.text };
     case "CLEAR_ERROR":
       return { ...state, error: null };
     case "RESET":
