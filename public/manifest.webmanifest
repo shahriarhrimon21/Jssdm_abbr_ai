@@ -1,0 +1,18 @@
+{
+  "name": "JSSDM Reference Desk",
+  "short_name": "JSSDM",
+  "description": "JSSDM Military Abbreviation & AI Writing Assistant, grounded in JSSDM 2022. Core lookup, validation, and Smart Abbreviate history work fully offline.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#F1F1EA",
+  "theme_color": "#1E3A5F",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}

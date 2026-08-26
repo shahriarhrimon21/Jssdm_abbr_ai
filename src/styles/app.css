@@ -298,3 +298,9 @@ tr.clickable:hover{background:var(--surface-2);}
 .tone-row{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px;}
 
 .copyok{color:var(--ok);font-size:11.5px;}
+
+.smart-suggestion-list{display:flex;flex-direction:column;gap:12px;}
+.smart-suggestion-card{border:1px solid var(--border-strong);border-radius:var(--radius);padding:12px 14px;background:var(--surface-2);}
+.smart-suggestion-card.selected{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent);}
+.smart-suggestion-head{display:flex;align-items:center;gap:8px;flex-wrap:wrap;}
+.smart-issue-list{margin:8px 0 0;padding-left:18px;font-size:12.5px;color:var(--bad);line-height:1.6;}

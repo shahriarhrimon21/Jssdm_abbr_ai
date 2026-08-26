@@ -14,12 +14,21 @@ export interface AIRequestOptions {
   systemPrompt: string;
   messages: ChatMessage[];
   maxOutputTokens?: number;
+  /** Optional cancellation for in-flight requests — used by callers that need
+   *  to abandon a stale request (e.g. a newer regeneration superseding an
+   *  older one, or an explicit Stop/Cancel action) without waiting for the
+   *  network to finish. Omit for existing call sites' unchanged behaviour. */
+  signal?: AbortSignal;
 }
 
 export interface AIResult {
   ok: boolean;
   text?: string;
   error?: string;
+  /** True when this result reflects a cancelled request (via `signal`)
+   *  rather than a real failure — callers can use this to skip showing an
+   *  error state for a deliberate cancellation. */
+  aborted?: boolean;
 }
 
 export async function callAI(opts: AIRequestOptions): Promise<AIResult> {
@@ -34,8 +43,12 @@ export async function callAI(opts: AIRequestOptions): Promise<AIResult> {
         messages: opts.messages,
         maxOutputTokens: opts.maxOutputTokens,
       }),
+      signal: opts.signal,
     });
-  } catch {
+  } catch (e: any) {
+    if (opts.signal?.aborted || e?.name === "AbortError") {
+      return { ok: false, error: "Cancelled.", aborted: true };
+    }
     return { ok: false, error: "Could not reach the server. Check your connection and try again." };
   }
   let data: any = null;

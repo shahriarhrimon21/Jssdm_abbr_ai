@@ -3,6 +3,8 @@ export type ViewId =
   | "abbreviate"
   | "deabbreviate"
   | "ai"
+  | "smartAbbreviate"
+  | "smartHistory"
   | "search"
   | "validate"
   | "audit"
@@ -29,6 +31,7 @@ export const NAV: NavGroup[] = [
       { id: "abbreviate", label: "Abbreviate Text", icon: ">>" },
       { id: "deabbreviate", label: "De-abbreviate Text", icon: "<<" },
       { id: "ai", label: "AI Writing Assistant", icon: "ai" },
+      { id: "smartAbbreviate", label: "Smart Abbreviate", icon: "sm" },
     ],
   },
   { label: "Look Up", items: [{ id: "search", label: "Search / Reverse Lookup", icon: "?" }] },
@@ -40,7 +43,13 @@ export const NAV: NavGroup[] = [
       { id: "consistency", label: "Consistency Check", icon: "=?=" },
     ],
   },
-  { label: "Saved", items: [{ id: "favorites", label: "Favorites & Recent", icon: "*" }] },
+  {
+    label: "Saved",
+    items: [
+      { id: "favorites", label: "Favorites & Recent", icon: "*" },
+      { id: "smartHistory", label: "Smart History", icon: "hist" },
+    ],
+  },
   {
     label: "Reference",
     items: [
