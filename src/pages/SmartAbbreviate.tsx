@@ -7,10 +7,14 @@ import { callAI } from "../ai/client.ts";
 import { selectRelevantEntries, buildSuggestionSystemPrompt, parseSuggestionResponse } from "../ai/suggestionPrompt.ts";
 import { recordCopy, addNewHistoryRecord, updateHistoryRecord } from "../smartAbbreviate/history.ts";
 import ForceSelect from "../components/ForceSelect.tsx";
+import { useOnlineStatus } from "../hooks/useOnlineStatus.ts";
 import type { ViewId } from "../nav.ts";
 
 const ORIGINAL_DEBOUNCE_MS = 700;
 const FINAL_VALIDATE_DEBOUNCE_MS = 400;
+// §B10: a hung AI request must not leave the workspace stuck on
+// "Generating suggestions…" forever with no way out beyond a manual Stop.
+const REQUEST_TIMEOUT_MS = 30000;
 
 function isOnlineNow(): boolean {
   return typeof navigator === "undefined" ? true : navigator.onLine;
@@ -54,23 +58,18 @@ export default function SmartAbbreviate({
   const forceRef = useRef(force);
   forceRef.current = force;
 
-  // Online/offline detection — real connectivity events, not a poll. The
-  // browser's "online" event is optimistic (it only means "the network
-  // interface came back", not "the AI endpoint is reachable"), but it's
-  // exactly what lets us stop attempting AI calls the instant the OS/browser
-  // reports we're offline, which is the concrete requirement here.
+  // Online/offline detection — real connectivity events via the shared
+  // useOnlineStatus hook (also used by Topbar.tsx for the new global status
+  // indicator, so the listener wiring lives in exactly one place instead of
+  // being duplicated per page). The browser's "online" event is optimistic
+  // (it only means "the network interface came back", not "the AI endpoint
+  // is reachable"), but it's exactly what lets us stop attempting AI calls
+  // the instant the OS/browser reports we're offline, which is the concrete
+  // requirement here.
+  const online = useOnlineStatus();
   useEffect(() => {
-    function update() {
-      dispatch({ type: "SET_ONLINE", online: isOnlineNow() });
-    }
-    update();
-    window.addEventListener("online", update);
-    window.addEventListener("offline", update);
-    return () => {
-      window.removeEventListener("online", update);
-      window.removeEventListener("offline", update);
-    };
-  }, [dispatch]);
+    dispatch({ type: "SET_ONLINE", online });
+  }, [online, dispatch]);
 
   const runGeneration = useCallback(
     async (text: string) => {
@@ -98,6 +97,11 @@ export default function SmartAbbreviate({
 
       const controller = new AbortController();
       abortRef.current = controller;
+      let timedOut = false;
+      const timeoutId = setTimeout(() => {
+        timedOut = true;
+        controller.abort();
+      }, REQUEST_TIMEOUT_MS);
       const relevant = selectRelevantEntries(text);
       const systemPrompt = buildSuggestionSystemPrompt(relevant);
       const result = await callAI({
@@ -105,8 +109,27 @@ export default function SmartAbbreviate({
         messages: [{ role: "user", content: text }],
         signal: controller.signal,
       });
+      clearTimeout(timeoutId);
 
-      if (result.aborted) return; // Stop/Cancel already dispatched GENERATE_CANCEL
+      if (result.aborted) {
+        if (timedOut) {
+          // A real timeout, not a manual Stop — Stop already dispatches
+          // GENERATE_CANCEL itself, so only the timeout path needs to
+          // surface an error here (falling back to the engine's own result
+          // exactly like any other failed AI call, per §37).
+          const engineOut = runAbbreviate(text, forceRef.current).output;
+          dispatch({
+            type: "GENERATE_SUCCESS",
+            requestId: seq,
+            original: text,
+            rawSuggestions: [engineOut],
+            source: "engine",
+            force: forceRef.current,
+            degradedNotice: "The AI request took too long and was stopped. Showing the JSSDM engine's own result instead.",
+          });
+        }
+        return; // otherwise: Stop/Cancel already dispatched GENERATE_CANCEL
+      }
 
       if (!result.ok || !result.text) {
         const engineOut = runAbbreviate(text, forceRef.current).output;
@@ -296,10 +319,11 @@ export default function SmartAbbreviate({
           </div>
           <ForceSelect value={force} onChange={setForce} />
         </div>
-        <div className="btnrow">
+        <div className="btnrow" aria-busy={state.status === "loading"}>
           {state.status === "loading" && (
             <>
-              <span className="copyok" style={{ color: "var(--muted)" }}>
+              <span className="view-sub" style={{ margin: 0, display: "inline-flex", alignItems: "center" }} role="status" aria-live="polite">
+                <span className="spinner" aria-hidden="true" />
                 Generating suggestions…
               </span>
               <button className="btn secondary small" onClick={stopGeneration}>
@@ -318,7 +342,7 @@ export default function SmartAbbreviate({
         </div>
 
         {state.error && (
-          <div className="result-block bad" style={{ marginTop: 10 }}>
+          <div className="result-block bad fade-in" style={{ marginTop: 10 }} role="alert">
             {state.error}{" "}
             <button className="btn secondary small" style={{ marginLeft: 8 }} onClick={() => runGeneration(state.originalInput)}>
               Retry
@@ -326,14 +350,22 @@ export default function SmartAbbreviate({
           </div>
         )}
         {!state.error && state.notice && (
-          <div className="result-block warn" style={{ marginTop: 10 }}>
+          <div className="result-block warn fade-in" style={{ marginTop: 10 }} role="status" aria-live="polite">
             {state.notice}
           </div>
         )}
       </div>
 
       {pending && (
-        <div className="panel" style={{ borderColor: "var(--warn)" }}>
+        <div
+          className="panel fade-in"
+          style={{ borderColor: "var(--warn)" }}
+          role="alertdialog"
+          aria-label="Confirm action"
+          onKeyDown={(e) => {
+            if (e.key === "Escape") dispatch({ type: "CANCEL_PENDING_ACTION" });
+          }}
+        >
           {pending.kind === "apply-regeneration" && (
             <>
               <strong>A new set of suggestions is ready, but your current result has unsaved edits.</strong>
@@ -376,9 +408,12 @@ export default function SmartAbbreviate({
             {state.suggestions.map((s, i) => {
               const isSelected = s.id === state.selectedSuggestionId;
               return (
-                <div key={s.id} className={"smart-suggestion-card" + (isSelected ? " selected" : "")}>
+                <div key={s.id} className={"smart-suggestion-card fade-in" + (isSelected ? " selected" : "")}>
                   <div className="smart-suggestion-head">
-                    <span className={"badge " + (s.validation.valid ? "badge-ok" : "badge-bad")}>{s.validation.valid ? "Valid" : "Invalid"}</span>
+                    <span className={"badge " + (s.validation.valid ? "badge-ok" : "badge-bad")}>
+                      <span aria-hidden="true">{s.validation.valid ? "✓" : "✕"}</span>
+                      {s.validation.valid ? "Valid" : "Invalid"}
+                    </span>
                     <span className="view-sub" style={{ margin: 0 }}>
                       {s.source === "engine" ? "JSSDM engine" : s.source === "history" ? "From history" : `AI candidate ${i + 1}`}
                     </span>
@@ -418,7 +453,7 @@ export default function SmartAbbreviate({
       )}
 
       {state.selectedSuggestionId && (
-        <div className="panel">
+        <div className="panel fade-in">
           <h3>Final Result</h3>
           <textarea
             id="smart-final"
@@ -427,7 +462,12 @@ export default function SmartAbbreviate({
             onChange={(e) => setFinalEdited(e.target.value)}
           />
           <div className="btnrow" style={{ marginTop: 8 }}>
-            <span className={"badge " + (state.finalValidation?.valid ? "badge-ok" : "badge-bad")}>
+            <span
+              className={"badge " + (state.finalValidation?.valid ? "badge-ok" : "badge-bad")}
+              role="status"
+              aria-live="polite"
+            >
+              <span aria-hidden="true">{state.finalValidation?.valid ? "✓" : "✕"}</span>
               {state.finalValidation?.valid ? "Valid — ready to copy" : "Invalid — fix before copying"}
             </span>
           </div>
@@ -462,13 +502,13 @@ export default function SmartAbbreviate({
             {copiedFlash && <span className="copyok">Copied.</span>}
           </div>
           {clipboardError && (
-            <div className="result-block bad" style={{ marginTop: 10 }}>
+            <div className="result-block bad fade-in" style={{ marginTop: 10 }} role="alert">
               {clipboardError}
             </div>
           )}
 
           {postCopyPrompt && (
-            <div className="result-block ok" style={{ marginTop: 10 }}>
+            <div className="result-block ok fade-in" style={{ marginTop: 10 }} role="status">
               Saved to history. Start a new message?
               <div className="btnrow" style={{ marginTop: 8 }}>
                 <button className="btn small" onClick={startNewMessage}>

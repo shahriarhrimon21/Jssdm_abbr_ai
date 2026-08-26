@@ -1,12 +1,21 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { Dispatch } from "react";
 import type { AssistantAction, AssistantState } from "../ai/state.ts";
 import { buildSystemPrompt, TONES } from "../ai/prompts.ts";
-import { callAI } from "../ai/client.ts";
+import { callAI, type ChatMessage } from "../ai/client.ts";
 import { runAbbreviate } from "../jssdm/abbreviationEngine.ts";
 import { runDeabbreviate } from "../jssdm/deabbreviationEngine.ts";
 import HighlightedText from "../components/HighlightedText.tsx";
 import ForceSelect from "../components/ForceSelect.tsx";
+
+// §B10/B13: a hung network request must not leave the UI stuck in
+// "Working..." forever, and a fast-changing user (new request fired before
+// an older one resolves) must never let the older, now-stale response land
+// on top of a newer one. This mirrors the pattern already used by
+// SmartAbbreviate.tsx's runGeneration() — request-id sequencing plus an
+// AbortController, now brought to this page too (previously this page had
+// neither, which was itself a real gap relative to that requirement).
+const REQUEST_TIMEOUT_MS = 30000;
 
 const LS_PROVIDER = "jssdm_ai_provider_v1";
 const PROVIDERS = [
@@ -59,6 +68,14 @@ export default function AIWritingAssistant({
   const [copiedFinal, setCopiedFinal] = useState(false);
   const [provider, setProvider] = useState(loadStoredProvider);
 
+  const requestSeqRef = useRef(0);
+  const abortRef = useRef<AbortController | null>(null);
+  // Remembers exactly which call to re-run for the Retry button — Retry must
+  // redo whichever request actually failed (initial, follow-up, or "Send to
+  // AI"), not always re-submit the top draft box, which could be stale or
+  // empty by the time a later step's request fails.
+  const retryRef = useRef<(() => void) | null>(null);
+
   // A stale error from a previous visit to this page is transient state,
   // not session content — clear it each time the page is (re)mounted,
   // without touching any of the actual drafted text/conversation.
@@ -67,44 +84,85 @@ export default function AIWritingAssistant({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Abort any in-flight request when this page unmounts (navigating away).
+  // requestSeqRef/abortRef are component-local, so without this an
+  // abandoned request could still resolve later and, if the user returns to
+  // this page and starts a fresh request, land against a freshly-reset
+  // sequence counter that happens to match — the exact stale-overwrite bug
+  // the sequencing guard exists to prevent in the first place.
+  useEffect(() => {
+    return () => {
+      abortRef.current?.abort();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   function changeProvider(id: string) {
     setProvider(id);
     storeProvider(id);
   }
 
-  async function runInitial() {
-    if (!state.draftInput.trim()) return;
-    dispatch({ type: "SET_ORIGINAL", text: state.draftInput });
+  // Shared by every path that actually calls the AI (initial Generate/Check
+  // & Polish, a typed follow-up, and now "Send to AI →" on the final result
+  // — see sendFinalToAI() below for why that one needed fixing at all).
+  // Sets up its own AbortController + timeout + request-id guard each time
+  // it runs, so a slow/hung request can never silently overwrite a newer
+  // one and never leaves the button stuck showing "Working..." forever.
+  async function runAIRequest(userMessage: string, chatContext: ChatMessage[]) {
+    retryRef.current = () => runAIRequest(userMessage, chatContext);
+    const seq = ++requestSeqRef.current;
+    abortRef.current?.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
+    let timedOut = false;
+    const timeoutId = setTimeout(() => {
+      timedOut = true;
+      controller.abort();
+    }, REQUEST_TIMEOUT_MS);
+
     dispatch({ type: "REQUEST_START" });
     const systemPrompt = buildSystemPrompt(state.mode, state.tone, state.customTone, state.outputMode, state.signature);
     const result = await callAI({
       provider,
       systemPrompt,
-      messages: [{ role: "user", content: state.draftInput }],
+      messages: [...chatContext, { role: "user", content: userMessage }],
+      signal: controller.signal,
     });
+    clearTimeout(timeoutId);
+
+    if (seq !== requestSeqRef.current) return; // superseded by a newer request — never let a stale response land
+
+    if (result.aborted) {
+      if (timedOut) {
+        dispatch({ type: "REQUEST_ERROR", error: "The AI request took too long and was stopped. Please try again." });
+      }
+      // else: the user pressed Stop, which already dispatched REQUEST_CANCEL itself.
+      return;
+    }
     if (result.ok && result.text) {
-      dispatch({ type: "REQUEST_SUCCESS", text: result.text, userMessage: state.draftInput });
+      dispatch({ type: "REQUEST_SUCCESS", text: result.text, userMessage });
     } else {
       dispatch({ type: "REQUEST_ERROR", error: result.error || "The AI request failed." });
     }
   }
 
-  async function runFollowup() {
+  function stopAIRequest() {
+    abortRef.current?.abort();
+    dispatch({ type: "REQUEST_CANCEL" });
+  }
+
+  function runInitial() {
+    if (!state.draftInput.trim()) return;
+    const text = state.draftInput;
+    dispatch({ type: "SET_ORIGINAL", text });
+    runAIRequest(text, []);
+  }
+
+  function runFollowup() {
     if (!state.followupInput.trim() || !state.aiFinal) return;
-    dispatch({ type: "REQUEST_START" });
-    const systemPrompt = buildSystemPrompt(state.mode, state.tone, state.customTone, state.outputMode, state.signature);
     const msg = state.followupInput;
     dispatch({ type: "SET_FOLLOWUP_INPUT", text: "" });
-    const result = await callAI({
-      provider,
-      systemPrompt,
-      messages: [...state.chat, { role: "user", content: msg }],
-    });
-    if (result.ok && result.text) {
-      dispatch({ type: "REQUEST_SUCCESS", text: result.text, userMessage: msg });
-    } else {
-      dispatch({ type: "REQUEST_ERROR", error: result.error || "The AI request failed." });
-    }
+    runAIRequest(msg, state.chat);
   }
 
   // Explicit action: send the CURRENT edited AI draft — not the original,
@@ -131,13 +189,20 @@ export default function AIWritingAssistant({
     dispatch({ type: "JSSDM_GENERATED", text: r.output, spans: r.outSpans });
   }
 
-  // Takes the current final edited text back to the top as new AI input,
-  // without discarding anything already in this session — the previous
-  // chat history, AI draft, and JSSDM result all remain exactly as they
-  // were until the user explicitly runs the AI again.
+  // ROOT-CAUSE FIX (Phase 2 Priority 0): this button is labeled "Send to AI"
+  // but previously did not call the AI at all — it only copied the current
+  // final-edited text back into the (already-scrolled-past) draft input box
+  // with no loading state, no result, and no visible feedback of any kind,
+  // which is exactly what a user would experience as "Send to AI is not
+  // working." It now actually sends the current final-edited text to the AI
+  // as a follow-up turn in the existing conversation (same pipeline as the
+  // "Refine further" box), without discarding anything already in this
+  // session — the previous chat history, AI draft, and JSSDM result all
+  // remain exactly as they were unless/until this new response replaces
+  // aiFinal/aiEditedDraft on success (see REQUEST_SUCCESS in ai/state.ts).
   function sendFinalToAI() {
     if (!state.finalEdited) return;
-    dispatch({ type: "SET_DRAFT_INPUT", text: state.finalEdited });
+    runAIRequest(state.finalEdited, state.chat);
   }
 
   function copy(text: string, setter: (v: boolean) => void) {
@@ -259,16 +324,36 @@ export default function AIWritingAssistant({
                 : "e.g. A short memo requesting additional troop..."
           }
         />
-        <div className="btnrow" style={{ marginTop: 10 }}>
+        <div className="btnrow" style={{ marginTop: 10 }} aria-busy={state.loading}>
           <button className="btn" onClick={runInitial} disabled={state.loading || !state.draftInput.trim()}>
+            {state.loading && <span className="spinner" aria-hidden="true" />}
             {state.loading ? "Working..." : state.mode === "check" ? "Check & Polish" : "Generate"}
           </button>
+          {state.loading && (
+            <button className="btn secondary small" onClick={stopAIRequest}>
+              Stop
+            </button>
+          )}
         </div>
-        {state.error && <div className="result-block bad" style={{ marginTop: 10 }}>{state.error}</div>}
+        {/* Once a first AI result exists, a later error is shown next to the
+            action that actually failed (down near Send to AI / follow-up)
+            instead of repeated here too. */}
+        {state.error && !state.aiFinal && (
+          <div className="result-block bad fade-in" style={{ marginTop: 10 }} role="alert">
+            {state.error}{" "}
+            <button
+              className="btn secondary small"
+              style={{ marginLeft: 8 }}
+              onClick={() => (retryRef.current ? retryRef.current() : runInitial())}
+            >
+              Retry
+            </button>
+          </div>
+        )}
       </div>
 
       {state.aiFinal && (
-        <div className="panel">
+        <div className="panel fade-in">
           <div className="text-state-col">
             <h4>Original (never changed)</h4>
           </div>
@@ -322,15 +407,38 @@ export default function AIWritingAssistant({
                   Copy
                 </button>
                 {copiedFinal && <span className="copyok">Copied.</span>}
-                <button className="btn secondary small" onClick={sendFinalToAI}>
-                  Send to AI →
+                <button className="btn secondary small" onClick={sendFinalToAI} disabled={state.loading || !state.finalEdited}>
+                  {state.loading && <span className="spinner" aria-hidden="true" />}
+                  {state.loading ? "Sending to AI..." : "Send to AI →"}
                 </button>
+                {state.loading && (
+                  <button className="btn secondary small" onClick={stopAIRequest}>
+                    Stop
+                  </button>
+                )}
               </div>
             </>
           )}
 
+          {/* Covers a failure from Send to AI or a follow-up message — shown
+              here (once an AI result already exists) rather than only up in
+              the initial-request panel, since that panel is usually
+              scrolled out of view by the time the user reaches this point. */}
+          {state.error && (
+            <div className="result-block bad fade-in" style={{ marginTop: 10 }} role="alert">
+              {state.error}{" "}
+              <button
+                className="btn secondary small"
+                style={{ marginLeft: 8 }}
+                onClick={() => retryRef.current?.()}
+              >
+                Retry
+              </button>
+            </div>
+          )}
+
           {state.chat.length > 0 && (
-            <div className="chat-log" style={{ marginTop: 16 }}>
+            <div className="chat-log" style={{ marginTop: 16 }} role="log" aria-label="Conversation with the AI">
               {state.chat.map((m, i) => (
                 <div key={i} className={`chat-bubble ${m.role}`}>
                   {m.content}
@@ -351,8 +459,14 @@ export default function AIWritingAssistant({
               }}
             />
             <button className="btn secondary small" onClick={runFollowup} disabled={state.loading || !state.followupInput.trim()}>
-              Send
+              {state.loading && <span className="spinner" aria-hidden="true" />}
+              {state.loading ? "Sending..." : "Send"}
             </button>
+            {state.loading && (
+              <button className="btn secondary small" onClick={stopAIRequest}>
+                Stop
+              </button>
+            )}
           </div>
         </div>
       )}

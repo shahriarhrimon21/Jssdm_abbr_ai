@@ -123,6 +123,7 @@ export type AssistantAction =
   | { type: "REQUEST_START" }
   | { type: "REQUEST_SUCCESS"; text: string; userMessage: string }
   | { type: "REQUEST_ERROR"; error: string }
+  | { type: "REQUEST_CANCEL" }
   | { type: "SET_AI_EDITED_DRAFT"; text: string }
   | { type: "JSSDM_GENERATED"; text: string; spans: Span[] }
   | { type: "SET_FINAL_EDITED"; text: string }
@@ -167,6 +168,11 @@ export function assistantReducer(state: AssistantState, action: AssistantAction)
       };
     case "REQUEST_ERROR":
       return { ...state, loading: false, error: action.error };
+    case "REQUEST_CANCEL":
+      // A deliberate Stop click, or a superseded request being abandoned in
+      // favour of a newer one — either way this is not a failure, so no
+      // `error` is set (mirrors SmartAbbreviate's GENERATE_CANCEL).
+      return { ...state, loading: false };
     case "SET_AI_EDITED_DRAFT":
       return { ...state, aiEditedDraft: action.text };
     case "JSSDM_GENERATED":

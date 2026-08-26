@@ -130,6 +130,30 @@ test("CLEAR_ERROR only touches error, never the session content", () => {
   assert.equal(s.original, "keep me");
 });
 
+/* ---- REQUEST_CANCEL: added for the Phase 2 Priority-0 fix — a Stop click
+ * or a superseded (abandoned) in-flight request must clear `loading`
+ * without ever setting `error`, since neither case is actually a failure. */
+
+test("REQUEST_CANCEL clears loading without setting an error", () => {
+  let s = assistantReducer(initialAssistantState, { type: "REQUEST_START" });
+  assert.equal(s.loading, true);
+  s = assistantReducer(s, { type: "REQUEST_CANCEL" });
+  assert.equal(s.loading, false);
+  assert.equal(s.error, null, "a cancel is not a failure — it must never surface an error message");
+});
+
+test("REQUEST_CANCEL never touches prior session content (aiFinal, chat, jssdmGenerated, finalEdited)", () => {
+  let s = assistantReducer(initialAssistantState, { type: "REQUEST_SUCCESS", text: "kept ai draft", userMessage: "go" });
+  s = assistantReducer(s, { type: "JSSDM_GENERATED", text: "kept jssdm", spans: [] });
+  s = assistantReducer(s, { type: "REQUEST_START" });
+  s = assistantReducer(s, { type: "REQUEST_CANCEL" });
+  assert.equal(s.loading, false);
+  assert.equal(s.aiFinal, "kept ai draft");
+  assert.equal(s.jssdmGenerated, "kept jssdm");
+  assert.equal(s.finalEdited, "kept jssdm");
+  assert.equal(s.chat.length, 2);
+});
+
 test("RESET preserves outputMode and signature alongside mode/tone (settings survive; session content clears)", () => {
   let s = assistantReducer(initialAssistantState, { type: "SET_OUTPUT_MODE", outputMode: "whatsapp" });
   s = assistantReducer(s, { type: "SET_SIGNATURE", signature: "BM" });

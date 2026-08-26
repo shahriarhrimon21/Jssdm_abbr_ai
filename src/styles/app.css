@@ -297,10 +297,63 @@ tr.clickable:hover{background:var(--surface-2);}
 
 .tone-row{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px;}
 
-.copyok{color:var(--ok);font-size:11.5px;}
-
 .smart-suggestion-list{display:flex;flex-direction:column;gap:12px;}
-.smart-suggestion-card{border:1px solid var(--border-strong);border-radius:var(--radius);padding:12px 14px;background:var(--surface-2);}
+.smart-suggestion-card{border:1px solid var(--border-strong);border-radius:var(--radius);padding:12px 14px;background:var(--surface-2);transition:border-color .15s ease,box-shadow .15s ease;}
 .smart-suggestion-card.selected{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent);}
 .smart-suggestion-head{display:flex;align-items:center;gap:8px;flex-wrap:wrap;}
 .smart-issue-list{margin:8px 0 0;padding-left:18px;font-size:12.5px;color:var(--bad);line-height:1.6;}
+
+/* ---------- Phase 2: design-system polish — loading/status indicators,
+   subtle motion, and screen-reader-only text. Deliberately reuses the
+   existing token set and the existing global prefers-reduced-motion rule
+   above (it already zeroes animation/transition duration everywhere, so
+   every animation added below is automatically minimized for viewers who
+   asked for reduced motion — nothing extra needed per-animation). ---------- */
+
+.sr-only{
+  position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;
+  clip:rect(0,0,0,0);white-space:nowrap;border:0;
+}
+
+@keyframes spin{to{transform:rotate(360deg);}}
+.spinner{
+  display:inline-block;width:12px;height:12px;flex:0 0 auto;
+  border:2px solid currentColor;border-right-color:transparent;border-radius:50%;
+  opacity:.75;animation:spin .6s linear infinite;vertical-align:-2px;margin-right:6px;
+}
+
+@keyframes fadeInUp{from{opacity:0;transform:translateY(4px);}to{opacity:1;transform:translateY(0);}}
+.fade-in{animation:fadeInUp .18s ease-out both;}
+
+@keyframes popIn{0%{opacity:0;transform:scale(.9);}60%{opacity:1;transform:scale(1.03);}100%{transform:scale(1);}}
+.copyok{color:var(--ok);font-size:11.5px;display:inline-flex;align-items:center;gap:4px;animation:popIn .22s ease-out both;}
+
+.btn{transition:filter .12s ease,transform .08s ease;}
+.btn:active:not(:disabled){transform:scale(.97);}
+.qbtn,.chip,.navbtn,.dash-card{transition:background-color .12s ease,border-color .12s ease;}
+
+/* Compact status pill for the global online/offline indicator (Topbar) —
+   deliberately small and text+icon (never color alone), never a banner. */
+.status-pill{
+  display:inline-flex;align-items:center;gap:6px;font-size:11.5px;
+  padding:3px 9px;border-radius:999px;border:1px solid transparent;white-space:nowrap;
+}
+.status-pill .dot{width:6px;height:6px;border-radius:50%;flex:0 0 auto;}
+.status-pill.online{color:var(--accent-ink);border-color:rgba(255,255,255,.35);opacity:.85;}
+.status-pill.online .dot{background:currentColor;}
+.status-pill.offline{background:var(--warn-bg);color:var(--warn);border-color:var(--warn);}
+.status-pill.offline .dot{background:var(--warn);}
+
+/* Touch targets on small screens — buttons/inputs get a bit more height so
+   they're comfortably tappable, without changing anything about desktop's
+   already-compact density. */
+@media (max-width:640px){
+  .btn{min-height:38px;padding:8px 14px;}
+  .btn.small{min-height:34px;}
+  input[type=text],textarea,select{min-height:38px;}
+  .field-row{flex-direction:column;align-items:stretch;}
+  .field-row > *{width:100%;}
+  .btnrow{gap:8px;}
+  .topbar{padding:10px 14px;gap:10px;}
+  .topbar .brand{gap:6px;}
+}

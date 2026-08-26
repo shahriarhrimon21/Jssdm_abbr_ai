@@ -112,7 +112,15 @@ export default function SmartHistory({
             </button>
           )}
           {confirmClear && (
-            <>
+            <span
+              role="alertdialog"
+              aria-label="Confirm clear all"
+              className="fade-in"
+              style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}
+              onKeyDown={(e) => {
+                if (e.key === "Escape") setConfirmClear(false);
+              }}
+            >
               <span className="view-sub" style={{ margin: 0 }}>
                 Delete all {all.length} records? This cannot be undone.
               </span>
@@ -122,17 +130,17 @@ export default function SmartHistory({
               <button className="btn secondary small" onClick={() => setConfirmClear(false)}>
                 Cancel
               </button>
-            </>
+            </span>
           )}
         </div>
       </div>
 
       {shown.length === 0 && (
-        <div className="empty">{all.length === 0 ? "No history yet — copied results will appear here." : "No records match your search."}</div>
+        <div className="empty">{all.length === 0 ? "No history yet — copied results will appear here." : "No matching history found."}</div>
       )}
 
       {shown.map((r) => (
-        <div className="panel" key={r.id}>
+        <div className="panel fade-in" key={r.id}>
           <div className="view-sub" style={{ marginBottom: 6 }}>
             {new Date(r.timestamp).toLocaleString()}
           </div>
