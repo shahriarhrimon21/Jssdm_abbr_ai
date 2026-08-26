@@ -29,7 +29,7 @@ export async function callAI(opts: AIRequestOptions): Promise<AIResult> {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        provider: opts.provider || "gemini",
+        provider: opts.provider || "groq",
         systemPrompt: opts.systemPrompt,
         messages: opts.messages,
         maxOutputTokens: opts.maxOutputTokens,

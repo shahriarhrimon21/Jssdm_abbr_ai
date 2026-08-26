@@ -8,14 +8,15 @@ import ForceSelect from "../components/ForceSelect.tsx";
 
 const LS_PROVIDER = "jssdm_ai_provider_v1";
 const PROVIDERS = [
+  { id: "groq", label: "Groq (free, no card)" },
   { id: "gemini", label: "Google Gemini" },
   { id: "openai", label: "OpenAI" },
 ];
 function loadStoredProvider(): string {
   try {
-    return localStorage.getItem(LS_PROVIDER) || "gemini";
+    return localStorage.getItem(LS_PROVIDER) || "groq";
   } catch {
-    return "gemini";
+    return "groq";
   }
 }
 function storeProvider(id: string): void {

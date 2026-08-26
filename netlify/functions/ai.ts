@@ -17,14 +17,16 @@
 import type { AIProvider } from "./providers/types.ts";
 import { geminiProvider } from "./providers/gemini.ts";
 import { openaiProvider } from "./providers/openai.ts";
+import { groqProvider } from "./providers/groq.ts";
 import { claudeProvider } from "./providers/claude.ts";
 
 const PROVIDERS: Record<string, AIProvider> = {
   gemini: geminiProvider,
   openai: openaiProvider,
+  groq: groqProvider,
   claude: claudeProvider,
 };
-const DEFAULT_PROVIDER = "gemini";
+const DEFAULT_PROVIDER = "groq";
 
 const MAX_MESSAGES = 40;
 const MAX_MESSAGE_CHARS = 12000;

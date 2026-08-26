@@ -77,15 +77,28 @@ test("openai: reports 'not configured' with no OPENAI_API_KEY set, and never ech
   }
 });
 
-test("defaults to the gemini provider when none is specified", async () => {
-  const prevKey = process.env.GEMINI_API_KEY;
-  delete process.env.GEMINI_API_KEY;
+test("groq: reports 'not configured' with no GROQ_API_KEY set, and never echoes a key", async () => {
+  const prevKey = process.env.GROQ_API_KEY;
+  delete process.env.GROQ_API_KEY;
+  try {
+    const res = await handler(req({ provider: "groq", systemPrompt: "x", messages: [{ role: "user", content: "hi" }] }));
+    assert.equal(res.status, 503);
+    const data = await res.json();
+    assert.equal(data.ok, false);
+  } finally {
+    if (prevKey !== undefined) process.env.GROQ_API_KEY = prevKey;
+  }
+});
+
+test("defaults to the groq provider (free, no card) when none is specified", async () => {
+  const prevKey = process.env.GROQ_API_KEY;
+  delete process.env.GROQ_API_KEY;
   try {
     const res = await handler(req({ systemPrompt: "x", messages: [{ role: "user", content: "hi" }] }));
     assert.equal(res.status, 503);
     const data = await res.json();
-    assert.match(data.error, /Gemini/);
+    assert.match(data.error, /Groq/);
   } finally {
-    if (prevKey !== undefined) process.env.GEMINI_API_KEY = prevKey;
+    if (prevKey !== undefined) process.env.GROQ_API_KEY = prevKey;
   }
 });
