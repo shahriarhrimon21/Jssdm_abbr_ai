@@ -1,7 +1,7 @@
 {
   "name": "JSSDM Reference Desk",
   "short_name": "JSSDM",
-  "description": "JSSDM Military Abbreviation & AI Writing Assistant, grounded in JSSDM 2022. Core lookup, validation, and Smart Abbreviate history work fully offline.",
+  "description": "JSSDM Military Abbreviation & AI Writing Assistant, grounded in JSSDM 2022. Core lookup and validation work fully offline.",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",

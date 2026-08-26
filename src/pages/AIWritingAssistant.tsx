@@ -11,10 +11,8 @@ import ForceSelect from "../components/ForceSelect.tsx";
 // §B10/B13: a hung network request must not leave the UI stuck in
 // "Working..." forever, and a fast-changing user (new request fired before
 // an older one resolves) must never let the older, now-stale response land
-// on top of a newer one. This mirrors the pattern already used by
-// SmartAbbreviate.tsx's runGeneration() — request-id sequencing plus an
-// AbortController, now brought to this page too (previously this page had
-// neither, which was itself a real gap relative to that requirement).
+// on top of a newer one — request-id sequencing plus an AbortController
+// guard against both.
 const REQUEST_TIMEOUT_MS = 30000;
 
 const LS_PROVIDER = "jssdm_ai_provider_v1";

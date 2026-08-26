@@ -70,22 +70,22 @@ test("exact required wording — lowercase 'sir', 'info' not 'information', 'con
 
 /* ---- applyClosingLine: full message structure ---- */
 
-test("applyClosingLine inserts the info closing immediately before Regards when missing (Test 1)", () => {
+test("applyClosingLine inserts the info closing before Regards, with a one-line gap above it, when missing (Test 1)", () => {
   const input = "Assalamualaikum sir,\nThe training has been completed successfully.\nRegards";
   const out = applyClosingLine(input);
-  assert.equal(out, "Assalamualaikum sir,\nThe training has been completed successfully.\nFor your kind info, sir.\nRegards");
+  assert.equal(out, "Assalamualaikum sir,\nThe training has been completed successfully.\n\nFor your kind info, sir.\nRegards");
 });
 
-test("applyClosingLine inserts the permission closing immediately before Regards (Test 3)", () => {
+test("applyClosingLine inserts the permission closing, with a one-line gap above it, immediately before Regards (Test 3)", () => {
   const input = "Assalamualaikum sir,\nI request permission to proceed to Dhaka tomorrow.\nRegards";
   const out = applyClosingLine(input);
-  assert.match(out, /I request permission to proceed to Dhaka tomorrow\.\nFor your kind permission, sir\.\nRegards$/);
+  assert.match(out, /I request permission to proceed to Dhaka tomorrow\.\n\nFor your kind permission, sir\.\nRegards$/);
 });
 
-test("applyClosingLine inserts the consideration closing immediately before Regards (Test 5)", () => {
+test("applyClosingLine inserts the consideration closing, with a one-line gap above it, immediately before Regards (Test 5)", () => {
   const input = "Assalamualaikum sir,\nI request your opinion regarding the proposed schedule.\nRegards";
   const out = applyClosingLine(input);
-  assert.match(out, /I request your opinion regarding the proposed schedule\.\nFor your kind consideration, sir\.\nRegards$/);
+  assert.match(out, /I request your opinion regarding the proposed schedule\.\n\nFor your kind consideration, sir\.\nRegards$/);
 });
 
 test("applyClosingLine does NOT force a line onto a pure acknowledgement (Test 8)", () => {
@@ -93,20 +93,27 @@ test("applyClosingLine does NOT force a line onto a pure acknowledgement (Test 8
   assert.equal(applyClosingLine(input), "Noted, sir.");
 });
 
-test("applyClosingLine replaces a WRONG closing line rather than stacking a second one", () => {
+test("applyClosingLine replaces a WRONG closing line rather than stacking a second one, keeping the one-line gap", () => {
   const input = "Assalamualaikum sir,\nI request permission to proceed to Dhaka tomorrow.\nFor your kind consideration, sir.\nRegards";
   const out = applyClosingLine(input);
   const occurrences = (out.match(/For your kind/g) || []).length;
   assert.equal(occurrences, 1, "must not leave both the wrong and the correct line present");
-  assert.match(out, /For your kind permission, sir\.\nRegards$/);
+  assert.match(out, /I request permission to proceed to Dhaka tomorrow\.\n\nFor your kind permission, sir\.\nRegards$/);
 });
 
-test("applyClosingLine collapses a DUPLICATE closing line down to exactly one, correctly worded", () => {
+test("applyClosingLine collapses a DUPLICATE closing line down to exactly one, correctly worded, with one gap line", () => {
   const input =
     "Assalamualaikum sir,\nThe training has been completed successfully.\nFor your kind info, sir.\nFor your kind info, sir.\nRegards";
   const out = applyClosingLine(input);
   const occurrences = (out.match(/For your kind info, sir\./g) || []).length;
   assert.equal(occurrences, 1);
+  assert.match(out, /The training has been completed successfully\.\n\nFor your kind info, sir\.\nRegards$/);
+});
+
+test("applyClosingLine normalizes an already-present extra gap down to exactly one blank line", () => {
+  const input = "Assalamualaikum sir,\nThe training has been completed successfully.\n\n\n\nFor your kind info, sir.\nRegards";
+  const out = applyClosingLine(input);
+  assert.equal(out, "Assalamualaikum sir,\nThe training has been completed successfully.\n\nFor your kind info, sir.\nRegards");
 });
 
 test("applyClosingLine never places the closing line after Regards or mid-message", () => {
@@ -115,6 +122,7 @@ test("applyClosingLine never places the closing line after Regards or mid-messag
   const lines = out.split("\n");
   const regardsIdx = lines.findIndex((l) => /^regards\.?$/i.test(l));
   assert.equal(lines[regardsIdx - 1], "For your kind info, sir.");
+  assert.equal(lines[regardsIdx - 2], "", "exactly one blank line separates the body from the closing line");
   assert.ok(!lines.slice(regardsIdx + 1).some((l) => /for your kind/i.test(l)), "closing line must never appear after Regards");
   assert.equal(lines[lines.length - 1], "Maj Rahman", "a signature after Regards is preserved");
 });

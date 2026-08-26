@@ -1,12 +1,10 @@
 import { useEffect, useState } from "react";
 
 /**
- * Shared online/offline detection — extracted so the Topbar can show one
- * compact, global status indicator (Part U: "subtle but clear... NOT an
- * oversized banner") instead of only SmartAbbreviate.tsx knowing about
- * connectivity, which previously left every other page silently unaware.
- * Same real-events approach SmartAbbreviate.tsx already used (the browser's
- * "online"/"offline" events), just lifted to be reusable.
+ * Shared online/offline detection — a single, reusable hook (backed by the
+ * browser's "online"/"offline" events) so the Topbar can show one compact,
+ * global status indicator (Part U: "subtle but clear... NOT an oversized
+ * banner") that any page can read.
  */
 function isOnlineNow(): boolean {
   return typeof navigator === "undefined" ? true : navigator.onLine;

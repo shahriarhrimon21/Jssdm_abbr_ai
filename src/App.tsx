@@ -5,8 +5,6 @@ import Dashboard from "./pages/Dashboard.tsx";
 import Abbreviate from "./pages/Abbreviate.tsx";
 import Deabbreviate from "./pages/Deabbreviate.tsx";
 import AIWritingAssistant from "./pages/AIWritingAssistant.tsx";
-import SmartAbbreviate from "./pages/SmartAbbreviate.tsx";
-import SmartHistory from "./pages/SmartHistory.tsx";
 import Search from "./pages/Search.tsx";
 import Validate from "./pages/Validate.tsx";
 import Audit from "./pages/Audit.tsx";
@@ -16,7 +14,6 @@ import Rules from "./pages/Rules.tsx";
 import Coverage from "./pages/Coverage.tsx";
 import type { ViewId } from "./nav.ts";
 import { assistantReducer, initialAssistantState } from "./ai/state.ts";
-import { smartAbbreviateReducer, initialSmartAbbreviateState } from "./smartAbbreviate/state.ts";
 
 export default function App() {
   const [view, setView] = useState<ViewId>("dashboard");
@@ -31,11 +28,6 @@ export default function App() {
   // architecture level instead of patching around it.
   const [aiState, aiDispatch] = useReducer(assistantReducer, initialAssistantState);
 
-  // Same lifted-state reasoning as aiState above — an in-progress Smart
-  // Abbreviate message (original text, suggestions, hand-edits) must
-  // survive navigating to History (or any other page) and back.
-  const [smartState, smartDispatch] = useReducer(smartAbbreviateReducer, initialSmartAbbreviateState);
-
   let page;
   switch (view) {
     case "dashboard":
@@ -49,12 +41,6 @@ export default function App() {
       break;
     case "ai":
       page = <AIWritingAssistant force={force} setForce={setForce} state={aiState} dispatch={aiDispatch} />;
-      break;
-    case "smartAbbreviate":
-      page = <SmartAbbreviate force={force} setForce={setForce} state={smartState} dispatch={smartDispatch} setView={setView} />;
-      break;
-    case "smartHistory":
-      page = <SmartHistory force={force} dispatch={smartDispatch} setView={setView} />;
       break;
     case "search":
       page = <Search />;

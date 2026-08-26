@@ -128,19 +128,22 @@ export function applyClosingLine(message: string): string {
     // guide requires it) — append both so the required structure holds
     // regardless.
     while (out.length && out[out.length - 1].trim() === "") out.pop();
-    out.push(correctLine, "Regards");
+    out.push("", correctLine, "Regards");
     return out.join("\n");
   }
 
-  // Drop any blank line(s) directly between the message and "Regards" so
-  // the closing line lands immediately adjacent on both sides, matching the
-  // required "[Main message] / For your kind..., sir. / Regards" structure
-  // (Part 6/11) exactly — no gap, no duplicate.
+  // Normalize to exactly one blank line between the message body and the
+  // closing line, and no gap between the closing line and "Regards" —
+  // regardless of how the AI happened to space things:
+  //   [Main message]
+  //   <blank line>
+  //   For your kind ..., sir.
+  //   Regards
   let insertAt = regardsIdx;
   while (insertAt > 0 && out[insertAt - 1].trim() === "") {
     out.splice(insertAt - 1, 1);
     insertAt--;
   }
-  out.splice(insertAt, 0, correctLine);
+  out.splice(insertAt, 0, "", correctLine);
   return out.join("\n");
 }

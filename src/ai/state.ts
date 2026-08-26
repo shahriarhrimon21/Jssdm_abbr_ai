@@ -184,7 +184,7 @@ export function assistantReducer(state: AssistantState, action: AssistantAction)
     case "REQUEST_CANCEL":
       // A deliberate Stop click, or a superseded request being abandoned in
       // favour of a newer one — either way this is not a failure, so no
-      // `error` is set (mirrors SmartAbbreviate's GENERATE_CANCEL).
+      // `error` is set.
       return { ...state, loading: false };
     case "SET_AI_EDITED_DRAFT":
       return { ...state, aiEditedDraft: action.text };
