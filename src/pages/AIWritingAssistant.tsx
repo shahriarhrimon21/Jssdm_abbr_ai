@@ -1,5 +1,6 @@
-import { useReducer, useState } from "react";
-import { assistantReducer, initialAssistantState } from "../ai/state.ts";
+import { useEffect, useState } from "react";
+import type { Dispatch } from "react";
+import type { AssistantAction, AssistantState } from "../ai/state.ts";
 import { buildSystemPrompt, TONES } from "../ai/prompts.ts";
 import { callAI } from "../ai/client.ts";
 import { runAbbreviate } from "../jssdm/abbreviationEngine.ts";
@@ -27,13 +28,36 @@ function storeProvider(id: string): void {
   }
 }
 
-export default function AIWritingAssistant({ force, setForce }: { force: string; setForce: (f: string) => void }) {
-  const [state, dispatch] = useReducer(assistantReducer, initialAssistantState);
-  const [draftInput, setDraftInput] = useState("");
-  const [followup, setFollowup] = useState("");
+/**
+ * `state`/`dispatch` are owned by App.tsx (see src/ai/state.ts's top comment
+ * for why) — this component reads and dispatches into that shared session
+ * instead of holding its own useReducer/useState for anything that needs to
+ * survive navigating away from this page. Only genuinely transient,
+ * per-mount UI state (the "Copied." flash, and the AI provider choice which
+ * is already durably persisted via localStorage) stays local.
+ */
+export default function AIWritingAssistant({
+  force,
+  setForce,
+  state,
+  dispatch,
+}: {
+  force: string;
+  setForce: (f: string) => void;
+  state: AssistantState;
+  dispatch: Dispatch<AssistantAction>;
+}) {
   const [copiedAI, setCopiedAI] = useState(false);
   const [copiedJssdm, setCopiedJssdm] = useState(false);
   const [provider, setProvider] = useState(loadStoredProvider);
+
+  // A stale error from a previous visit to this page is transient state,
+  // not session content — clear it each time the page is (re)mounted,
+  // without touching any of the actual drafted text/conversation.
+  useEffect(() => {
+    if (state.error) dispatch({ type: "CLEAR_ERROR" });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   function changeProvider(id: string) {
     setProvider(id);
@@ -41,33 +65,33 @@ export default function AIWritingAssistant({ force, setForce }: { force: string;
   }
 
   async function runInitial() {
-    if (!draftInput.trim()) return;
-    dispatch({ type: "SET_ORIGINAL", text: draftInput });
+    if (!state.draftInput.trim()) return;
+    dispatch({ type: "SET_ORIGINAL", text: state.draftInput });
     dispatch({ type: "REQUEST_START" });
-    const systemPrompt = buildSystemPrompt(state.mode, state.tone, state.customTone);
+    const systemPrompt = buildSystemPrompt(state.mode, state.tone, state.customTone, state.outputMode, state.signature);
     const result = await callAI({
       provider,
       systemPrompt,
-      messages: [{ role: "user", content: draftInput }],
+      messages: [{ role: "user", content: state.draftInput }],
     });
     if (result.ok && result.text) {
-      dispatch({ type: "REQUEST_SUCCESS", text: result.text, userMessage: draftInput });
+      dispatch({ type: "REQUEST_SUCCESS", text: result.text, userMessage: state.draftInput });
     } else {
       dispatch({ type: "REQUEST_ERROR", error: result.error || "The AI request failed." });
     }
   }
 
   async function runFollowup() {
-    if (!followup.trim() || !state.aiFinal) return;
+    if (!state.followupInput.trim() || !state.aiFinal) return;
     dispatch({ type: "REQUEST_START" });
-    const systemPrompt = buildSystemPrompt(state.mode, state.tone, state.customTone);
+    const systemPrompt = buildSystemPrompt(state.mode, state.tone, state.customTone, state.outputMode, state.signature);
+    const msg = state.followupInput;
+    dispatch({ type: "SET_FOLLOWUP_INPUT", text: "" });
     const result = await callAI({
       provider,
       systemPrompt,
-      messages: [...state.chat, { role: "user", content: followup }],
+      messages: [...state.chat, { role: "user", content: msg }],
     });
-    const msg = followup;
-    setFollowup("");
     if (result.ok && result.text) {
       dispatch({ type: "REQUEST_SUCCESS", text: result.text, userMessage: msg });
     } else {
@@ -89,6 +113,7 @@ export default function AIWritingAssistant({ force, setForce }: { force: string;
   }
 
   const jssdmSpans = state.jssdmFinal ? runAbbreviate(state.aiFinal || "", force).outSpans : [];
+  const isWhatsapp = state.outputMode === "whatsapp";
 
   return (
     <div>
@@ -109,13 +134,27 @@ export default function AIWritingAssistant({ force, setForce }: { force: string;
 
       <div className="panel">
         <div className="ai-toolbar">
-          <div className="ai-mode-toggle">
-            <button className={state.mode === "check" ? "active" : ""} onClick={() => dispatch({ type: "SET_MODE", mode: "check" })}>
-              Check &amp; Polish
-            </button>
-            <button className={state.mode === "generate" ? "active" : ""} onClick={() => dispatch({ type: "SET_MODE", mode: "generate" })}>
-              Generate
-            </button>
+          <div>
+            <label className="flabel">Output style</label>
+            <div className="ai-mode-toggle">
+              <button className={!isWhatsapp ? "active" : ""} onClick={() => dispatch({ type: "SET_OUTPUT_MODE", outputMode: "text" })}>
+                Text
+              </button>
+              <button className={isWhatsapp ? "active" : ""} onClick={() => dispatch({ type: "SET_OUTPUT_MODE", outputMode: "whatsapp" })}>
+                WhatsApp
+              </button>
+            </div>
+          </div>
+          <div>
+            <label className="flabel">Operation</label>
+            <div className="ai-mode-toggle">
+              <button className={state.mode === "check" ? "active" : ""} onClick={() => dispatch({ type: "SET_MODE", mode: "check" })}>
+                Check &amp; Polish
+              </button>
+              <button className={state.mode === "generate" ? "active" : ""} onClick={() => dispatch({ type: "SET_MODE", mode: "generate" })}>
+                Generate
+              </button>
+            </div>
           </div>
           <div>
             <label className="flabel" htmlFor="ai-provider">
@@ -131,6 +170,22 @@ export default function AIWritingAssistant({ force, setForce }: { force: string;
           </div>
           <ForceSelect value={force} onChange={setForce} />
         </div>
+
+        {isWhatsapp && (
+          <div style={{ marginBottom: 10 }}>
+            <label className="flabel" htmlFor="ai-signature">
+              Your signature (optional — used only if you provide it; never invented)
+            </label>
+            <input
+              id="ai-signature"
+              type="text"
+              placeholder='e.g. "BM" or "Maj Hemel"'
+              value={state.signature}
+              onChange={(e) => dispatch({ type: "SET_SIGNATURE", signature: e.target.value })}
+              style={{ maxWidth: 260 }}
+            />
+          </div>
+        )}
 
         <label className="flabel">Tone / expression</label>
         <div className="tone-row">
@@ -157,9 +212,20 @@ export default function AIWritingAssistant({ force, setForce }: { force: string;
         <label className="flabel" htmlFor="ai-draft">
           {state.mode === "check" ? "Text to check & polish" : "Describe what you want written"}
         </label>
-        <textarea id="ai-draft" value={draftInput} onChange={(e) => setDraftInput(e.target.value)} placeholder={state.mode === "check" ? "Paste your draft..." : "e.g. A short memo requesting additional troop..."} />
+        <textarea
+          id="ai-draft"
+          value={state.draftInput}
+          onChange={(e) => dispatch({ type: "SET_DRAFT_INPUT", text: e.target.value })}
+          placeholder={
+            state.mode === "check"
+              ? "Paste your draft..."
+              : isWhatsapp
+                ? "e.g. Inform Sir that I have taken move from my present unit and will join the new unit on 02 September."
+                : "e.g. A short memo requesting additional troop..."
+          }
+        />
         <div className="btnrow" style={{ marginTop: 10 }}>
-          <button className="btn" onClick={runInitial} disabled={state.loading || !draftInput.trim()}>
+          <button className="btn" onClick={runInitial} disabled={state.loading || !state.draftInput.trim()}>
             {state.loading ? "Working..." : state.mode === "check" ? "Check & Polish" : "Generate"}
           </button>
         </div>
@@ -221,13 +287,13 @@ export default function AIWritingAssistant({ force, setForce }: { force: string;
               type="text"
               style={{ flex: 1 }}
               placeholder='Refine further, e.g. "make it more formal"'
-              value={followup}
-              onChange={(e) => setFollowup(e.target.value)}
+              value={state.followupInput}
+              onChange={(e) => dispatch({ type: "SET_FOLLOWUP_INPUT", text: e.target.value })}
               onKeyDown={(e) => {
                 if (e.key === "Enter") runFollowup();
               }}
             />
-            <button className="btn secondary small" onClick={runFollowup} disabled={state.loading || !followup.trim()}>
+            <button className="btn secondary small" onClick={runFollowup} disabled={state.loading || !state.followupInput.trim()}>
               Send
             </button>
           </div>

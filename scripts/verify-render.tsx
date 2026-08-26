@@ -23,6 +23,7 @@ import HighlightedText from "../src/components/HighlightedText.tsx";
 import EvidenceBlockView from "../src/components/EvidenceBlockView.tsx";
 import DebugTraceView from "../src/components/DebugTraceView.tsx";
 import { traceAbbreviate } from "../src/jssdm/debug.ts";
+import { initialAssistantState } from "../src/ai/state.ts";
 
 const noop = () => {};
 
@@ -50,7 +51,28 @@ check("Consistency", <Consistency force="all" setForce={noop} />);
 check("Favorites", <Favorites />);
 check("Rules", <Rules />);
 check("Coverage", <Coverage />);
-check("AIWritingAssistant", <AIWritingAssistant force="all" setForce={noop} />);
+check("AIWritingAssistant (text mode)", <AIWritingAssistant force="all" setForce={noop} state={initialAssistantState} dispatch={noop} />);
+check(
+  "AIWritingAssistant (whatsapp mode, with a live session)",
+  <AIWritingAssistant
+    force="all"
+    setForce={noop}
+    state={{
+      ...initialAssistantState,
+      outputMode: "whatsapp",
+      signature: "BM",
+      draftInput: "let sir know troops moved",
+      original: "let sir know troops moved",
+      aiFinal: "Assalamualaikum Sir,\n\nTroops have moved.\n\nRegards\nBM",
+      jssdmFinal: "Assalamualaikum Sir,\n\nTps have mov.\n\nRegards\nBM",
+      chat: [
+        { role: "user", content: "let sir know troops moved" },
+        { role: "assistant", content: "Assalamualaikum Sir,\n\nTroops have moved.\n\nRegards\nBM" },
+      ],
+    }}
+    dispatch={noop}
+  />,
+);
 check("StatusBadge ok", <StatusBadge status="ok" />);
 check("StatusBadge rule", <StatusBadge status="rule" />);
 check("HighlightedText", <HighlightedText text="Personnel are en route" spans={[{ start: 0, end: 9, cls: "hl-verified", title: "test" }]} />);

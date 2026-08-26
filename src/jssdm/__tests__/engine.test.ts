@@ -195,3 +195,41 @@ test("lookupAbbrExact is case-sensitive per Section 2, Para 0241b(8)", () => {
   assert.ok(lower && lower[0].full === "Tank");
   assert.ok(upper && upper[0].full === "Taka");
 });
+
+/* ---- Phrase-first / longest-match regression suite ----
+ * scanWindows() (see parser.ts) already tries the longest word-window first
+ * at every position and only falls back to shorter windows when no longer
+ * match exists — this is a greedy longest-match algorithm, not word-by-word
+ * processing. These tests pin that behaviour down explicitly so a future
+ * change can't silently regress it back to word-first processing. */
+test('CRITICAL: "Junior Commissioned Officer" abbreviates as one phrase (JCO), not word-by-word', () => {
+  const r = runAbbreviate("Junior Commissioned Officer", "all");
+  assert.equal(r.output, "JCO");
+  assert.equal(r.rows.length, 1, "must be a single 3-word match, not three separate word matches");
+  assert.equal(r.rows[0].original, "Junior Commissioned Officer");
+  assert.equal(r.rows[0].abbr, "JCO");
+});
+
+test('CRITICAL: "Junior Commissioned Officer" inside a full sentence still resolves as one phrase', () => {
+  const r = runAbbreviate("The Junior Commissioned Officer will attend the meeting.", "all");
+  assert.match(r.output, /^The JCO will \S+ the meeting\.$/, "the 3-word phrase must collapse to JCO as a unit");
+  assert.ok(
+    !/jr\s+commissioned|commissioned\s+offr/i.test(r.output),
+    "must never fall back to abbreviating the individual words of a recognized phrase",
+  );
+});
+
+test("individual words still abbreviate correctly on their own when no larger phrase applies", () => {
+  assert.equal(runAbbreviate("Junior officer training.", "all").rows[0].abbr, "jr");
+  assert.equal(runAbbreviate("The officer arrived.", "all").rows[0].abbr, "offr");
+});
+
+test("longest-match wins on a genuine dataset overlap (air defence vs air defence artillery)", () => {
+  assert.ok(lookupFullExact("air defence"), "expected 'air defence' to be its own entry (AD)");
+  assert.ok(lookupFullExact("air defence artillery"), "expected 'air defence artillery' to be its own longer entry (ADA)");
+  const longer = runAbbreviate("The air defence artillery unit moved.", "all");
+  assert.match(longer.output, /\bADA\b/, "the 3-word phrase must win over the 2-word prefix");
+  assert.ok(!/\bAD artillery\b/.test(longer.output), "must not abbreviate only the 'air defence' prefix and leave 'artillery' dangling");
+  const shorter = runAbbreviate("Air defence radar was tested.", "all");
+  assert.match(shorter.output, /\bAD\b/, "when the longer phrase isn't present, the shorter one must still match");
+});

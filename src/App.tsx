@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useReducer, useState } from "react";
 import Topbar from "./components/Topbar.tsx";
 import Sidebar from "./components/Sidebar.tsx";
 import Dashboard from "./pages/Dashboard.tsx";
@@ -13,11 +13,20 @@ import Favorites from "./pages/Favorites.tsx";
 import Rules from "./pages/Rules.tsx";
 import Coverage from "./pages/Coverage.tsx";
 import type { ViewId } from "./nav.ts";
+import { assistantReducer, initialAssistantState } from "./ai/state.ts";
 
 export default function App() {
   const [view, setView] = useState<ViewId>("dashboard");
   const [force, setForce] = useState("all");
   const [debugMode, setDebugMode] = useState(false);
+
+  // Lifted to App — the one component that never unmounts while the page
+  // switches between features — so the AI Writing session (including the
+  // Text/WhatsApp mode and any unsent draft text) survives navigating away
+  // and back. See the comment at the top of src/ai/state.ts for why this
+  // fixes the "AI Writing session is lost when navigating" bug at the
+  // architecture level instead of patching around it.
+  const [aiState, aiDispatch] = useReducer(assistantReducer, initialAssistantState);
 
   let page;
   switch (view) {
@@ -31,7 +40,7 @@ export default function App() {
       page = <Deabbreviate force={force} setForce={setForce} debugMode={debugMode} />;
       break;
     case "ai":
-      page = <AIWritingAssistant force={force} setForce={setForce} />;
+      page = <AIWritingAssistant force={force} setForce={setForce} state={aiState} dispatch={aiDispatch} />;
       break;
     case "search":
       page = <Search />;

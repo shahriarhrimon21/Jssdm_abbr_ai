@@ -7,6 +7,8 @@
  * system prompt below says this explicitly so the model doesn't try to be
  * an abbreviation authority.
  */
+import type { OutputMode } from "./whatsappStyle.ts";
+import { buildWhatsAppGuidance } from "./whatsappStyle.ts";
 
 export const TONES = [
   "Formal / Official",
@@ -43,22 +45,31 @@ export function toneInstruction(tone: string, customTone?: string): string {
   return `Write in a ${tone.toLowerCase()} tone appropriate for military service writing.`;
 }
 
-export function buildSystemPrompt(mode: AssistantMode, tone: string, customTone?: string): string {
+/**
+ * outputMode/signature are optional and default to plain "text" behaviour
+ * (unchanged from before WhatsApp mode existed) so any existing call site
+ * that doesn't pass them keeps working exactly as before.
+ */
+export function buildSystemPrompt(mode: AssistantMode, tone: string, customTone?: string, outputMode?: OutputMode, signature?: string): string {
   const toneLine = toneInstruction(tone, customTone);
+  let base: string;
   if (mode === "check") {
-    return (
+    base =
       BASE_GUARDRAIL +
       "\n\nMode: Check & Polish. The user will give you a draft. Improve grammar, clarity, and structure while preserving their meaning and " +
       "any abbreviations/terms exactly as written. " +
       toneLine +
-      " Return only the improved text unless the user asks a follow-up question about it."
-    );
+      " Return only the improved text unless the user asks a follow-up question about it.";
+  } else {
+    base =
+      BASE_GUARDRAIL +
+      "\n\nMode: Generate. The user will describe what they want written (a memo, a paragraph, a message, etc.). Produce a complete draft that " +
+      "fulfills the request. " +
+      toneLine +
+      " Return only the drafted text unless the user asks a follow-up question about it.";
   }
-  return (
-    BASE_GUARDRAIL +
-    "\n\nMode: Generate. The user will describe what they want written (a memo, a paragraph, a message, etc.). Produce a complete draft that " +
-    "fulfills the request. " +
-    toneLine +
-    " Return only the drafted text unless the user asks a follow-up question about it."
-  );
+  if (outputMode === "whatsapp") {
+    base += "\n\n" + buildWhatsAppGuidance(signature);
+  }
+  return base;
 }
