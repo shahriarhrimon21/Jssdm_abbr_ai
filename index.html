@@ -14,16 +14,25 @@
       name="description"
       content="JSSDM ABBR StaffAI — AI-Powered Staff Work Assistant. Abbreviation, validation and staff writing grounded in JSSDM 2022."
     />
-    <link rel="manifest" href="/manifest.webmanifest" />
-    <!-- Belt-and-suspenders favicon chain: the SVG (icon.svg, the same
-         simplified crest built in Stage 2A to hold its shape at small
-         sizes) is the modern, preferred icon, but a bare SVG-only favicon
-         has no fallback if a browser/OS combination doesn't render it —
-         favicon.ico (generated from the same crest, multi-resolution:
-         16/32/48/64px) is the classic universally-supported fallback. -->
-    <link rel="icon" href="/favicon.ico" sizes="32x32" />
-    <link rel="icon" href="/icon.svg" type="image/svg+xml" />
-    <link rel="apple-touch-icon" href="/logo-crest-240.png" />
+    <link rel="manifest" href="/manifest.webmanifest?v=2" />
+    <!-- Favicon chain, regenerated from the current logo-mark.png crest (the
+         same artwork used in the Topbar/Sidebar/Dashboard) — not a redraw,
+         just resized to each required resolution:
+           favicon.ico   — multi-resolution (16/32/48px), universal fallback
+           icon-192.png / icon-512.png — referenced from manifest.webmanifest
+           apple-touch-icon.png — 180x180, iOS/Safari home-screen icon
+         The old geometric icon.svg reduction is no longer linked (it was a
+         separate simplified redraw of the previous crest, not the current
+         logo) but is left on disk, unused, for easy revert.
+         The "?v=2" query strings are a cache-busting version bump: browsers
+         cache favicons very aggressively, sometimes ignoring normal HTTP
+         cache headers entirely, so a same-URL swap of the icon bytes alone
+         is not reliably picked up by an existing visitor — see also the
+         CACHE_NAME bump in public/sw.js. -->
+    <link rel="icon" href="/favicon.ico?v=2" sizes="32x32" />
+    <link rel="icon" href="/icon-192.png?v=2" type="image/png" sizes="192x192" />
+    <link rel="icon" href="/icon-512.png?v=2" type="image/png" sizes="512x512" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png?v=2" />
     <meta name="theme-color" content="#0A2A1E" media="(prefers-color-scheme: light)" />
     <meta name="theme-color" content="#0B110D" media="(prefers-color-scheme: dark)" />
     <meta name="apple-mobile-web-app-capable" content="yes" />

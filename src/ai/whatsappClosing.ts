@@ -64,6 +64,18 @@ const CLOSING_LINE_RE = /^\s*for your kind (?:info(?:rmation)?|permission|consid
 
 const REGARDS_RE = /^\s*regards\.?\s*$/i;
 
+/** Broader than REGARDS_RE on purpose: matches "Regards", "Regards.",
+ *  "Regards,", "Regards:" — any bare closing-word line regardless of the
+ *  trailing punctuation the AI happened to use. This is the line
+ *  applyClosingLine now treats as "the start of the AI's own closing block"
+ *  (see the truncation step in applyClosingLine): everything from this line
+ *  to the end of the message is discarded and rebuilt deterministically,
+ *  including whatever signature-like text the AI put after it. Kept
+ *  separate from REGARDS_RE (which stays exact-match, "Regards" is emitted
+ *  in that precise form) so the two purposes — recognizing a sloppy AI
+ *  variant vs. emitting the canonical line — don't get conflated. */
+const REGARDS_LINE_RE = /^\s*regards\s*[.,:]?\s*$/i;
+
 /** First-line salutation detector — either a recognized greeting opener, or
  *  (matching this app's own style guide's own convention, e.g.
  *  "Assalamualaikum Sir,") a short line ending in a comma, since that's how
@@ -127,70 +139,88 @@ export function classifyClosingIntent(bodyText: string): ClosingIntent {
 }
 
 /**
- * Ensures the message has exactly the right closing line (or none) in
- * exactly the right place. Idempotent: running it twice on its own output
- * produces the same result, since it always strips every existing closing
- * candidate before deciding what (if anything) belongs there.
+ * Ensures the message has exactly the right closing line (or none), exactly
+ * one "Regards", and — when the app has a signature on file — exactly one
+ * correctly-placed signature line, in exactly the right place. Idempotent:
+ * running it twice on its own output produces the same result, since it
+ * always strips every existing closing/"Regards"/signature candidate before
+ * deciding what (if anything) belongs there.
+ *
+ * Signature ownership (see the file header and the bug this was built to
+ * fix): the AI is asked, in the prompt, to place the user's signature after
+ * "Regards" itself — but AI output is not reliable enough to trust for this
+ * any more than it is for the closing line. In practice it sometimes wrote
+ * its OWN "Regards,"/"Regards:" block (comma/colon instead of the exact
+ * "Regards" this function looks for), which this function's old, narrower
+ * "Regards" detection didn't recognize as a closing at all — so it went on
+ * to append a *second*, correct "For your kind ..., sir./Regards" pair
+ * after the AI's own block, producing duplicated "Regards" lines and a
+ * signature stranded before the real closing instead of after it.
+ *
+ * The fix: this function now owns the ENTIRE closing block, unconditionally.
+ * Every line from the first "Regards"-like line onward (REGARDS_LINE_RE —
+ * deliberately broader than REGARDS_RE, so "Regards,"/"Regards:" are caught
+ * too) is discarded, whatever the AI put there — including any signature
+ * text — and the block is rebuilt from scratch: the correct closing line
+ * (if the message's own content calls for one), a single bare "Regards",
+ * and then — ONLY the app-provided `signature` parameter, never anything
+ * the AI wrote — the signature line, with no blank line before it. The AI
+ * is never trusted to have supplied the right signature (or any signature
+ * at all); this function is the sole source of truth for what appears
+ * there, exactly like it already is for the closing line itself.
  *
  * `recipientType` defaults to "senior" — every pre-existing call site keeps
  * producing exactly the same ", sir."-suffixed lines as before the Senior/
  * Junior toggle existed; only an explicit "junior" caller gets the
- * sir-free wording (JUNIOR_CLOSING_LINES via closingLineFor).
+ * sir-free wording (JUNIOR_CLOSING_LINES via closingLineFor). `signature`
+ * defaults to empty — omitting it (as every pre-existing call site written
+ * before the signature fix does) means no signature line is ever added,
+ * matching prior behaviour for callers that don't pass one.
  */
-export function applyClosingLine(message: string, recipientType: RecipientType = "senior"): string {
+export function applyClosingLine(message: string, recipientType: RecipientType = "senior", signature = ""): string {
   if (message == null) return message;
   if (!message.trim()) return message;
 
   const lines = message.split(/\r?\n/);
 
-  // Strip every existing closing-line candidate first — right or wrong,
-  // single or duplicated — the one correct line (if any applies) is
-  // re-inserted at the guaranteed-correct position below (Part 9: no
-  // duplicates, wrong lines replaced, not stacked).
-  const withoutClosing = lines.filter((l) => !CLOSING_LINE_RE.test(l));
+  // Cut off the AI's own closing block entirely, from the first
+  // "Regards"-like line to the end of the message — this is what discards a
+  // malformed "Regards," plus whatever signature text followed it, rather
+  // than merely failing to recognize it and stacking a second block after.
+  const regardsLineIdx = lines.findIndex((l) => REGARDS_LINE_RE.test(l));
+  const beforeRegards = regardsLineIdx === -1 ? lines : lines.slice(0, regardsLineIdx);
 
-  // Classify from the body only: drop the greeting line (first line) and
-  // everything from "Regards" onward (closing/signature) — the decision is
-  // about what the message itself is doing, not its boilerplate.
-  const regardsIdxForBody = withoutClosing.findIndex((l) => REGARDS_RE.test(l));
-  const bodySlice = regardsIdxForBody === -1 ? withoutClosing : withoutClosing.slice(0, regardsIdxForBody);
-  const bodyLines = bodySlice.filter((l, i) => !(i === 0 && isGreetingLine(l)));
+  // Strip any remaining closing-line candidate from what's left (defensive:
+  // covers a closing line the AI placed somewhere other than immediately
+  // before its own "Regards", e.g. mid-message) — right or wrong, single or
+  // duplicated, the one correct line (if any applies) is re-inserted at the
+  // guaranteed-correct position below (Part 9: no duplicates, wrong lines
+  // replaced, not stacked).
+  const withoutClosing = beforeRegards.filter((l) => !CLOSING_LINE_RE.test(l));
+
+  // Classify from the body only: drop the greeting line (first line) — the
+  // decision is about what the message itself is doing, not its boilerplate.
+  const bodyLines = withoutClosing.filter((l, i) => !(i === 0 && isGreetingLine(l)));
   const bodyText = bodyLines.join(" ").trim();
 
   const intent = classifyClosingIntent(bodyText);
+  const sig = (signature || "").trim();
+
   if (!intent) {
-    // Nothing forced — and any stray closing line already removed above, so
-    // a message that shouldn't have one (Part 5) never keeps one just
-    // because the AI added it unprompted.
+    // Nothing forced — and any stray closing/Regards/signature block already
+    // removed above, so a message that shouldn't have one (Part 5) never
+    // keeps one just because the AI added it unprompted. (No signature is
+    // appended here either: there is no "Regards" for it to follow, and
+    // forcing one onto a bare acknowledgement was never part of this
+    // skeleton — matches this function's pre-existing behaviour.)
     return withoutClosing.join("\n");
   }
 
   const correctLine = closingLineFor(intent, recipientType);
   const out = withoutClosing.slice();
-  const regardsIdx = out.findIndex((l) => REGARDS_RE.test(l));
-
-  if (regardsIdx === -1) {
-    // "Regards" itself is missing (should not normally happen — the style
-    // guide requires it) — append both so the required structure holds
-    // regardless.
-    while (out.length && out[out.length - 1].trim() === "") out.pop();
-    out.push("", correctLine, "Regards");
-    return out.join("\n");
-  }
-
-  // Normalize to exactly one blank line between the message body and the
-  // closing line, and no gap between the closing line and "Regards" —
-  // regardless of how the AI happened to space things:
-  //   [Main message]
-  //   <blank line>
-  //   For your kind ..., sir.
-  //   Regards
-  let insertAt = regardsIdx;
-  while (insertAt > 0 && out[insertAt - 1].trim() === "") {
-    out.splice(insertAt - 1, 1);
-    insertAt--;
-  }
-  out.splice(insertAt, 0, "", correctLine);
+  while (out.length && out[out.length - 1].trim() === "") out.pop();
+  out.push("", correctLine, "Regards");
+  if (sig) out.push(sig);
   return out.join("\n");
 }
 

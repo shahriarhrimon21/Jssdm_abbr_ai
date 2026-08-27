@@ -159,7 +159,107 @@ test("applyClosingLine never places the closing line after Regards or mid-messag
   assert.equal(lines[regardsIdx - 1], "For your kind info, sir.");
   assert.equal(lines[regardsIdx - 2], "", "exactly one blank line separates the body from the closing line");
   assert.ok(!lines.slice(regardsIdx + 1).some((l) => /for your kind/i.test(l)), "closing line must never appear after Regards");
-  assert.equal(lines[lines.length - 1], "Maj Rahman", "a signature after Regards is preserved");
+  // "Maj Rahman" here is text the AI itself produced, with no `signature`
+  // argument passed — per the signature-ownership fix (see applyClosingLine's
+  // header), AI-authored sign-off text is never trusted, so it is discarded
+  // rather than preserved. Only the explicit `signature` parameter (tested
+  // below) ever produces a line here.
+  assert.equal(lines[lines.length - 1], "Regards", "no signature was passed in, so none is invented from the AI's own text");
+  assert.ok(!out.includes("Maj Rahman"), "AI-authored sign-off text is discarded, never trusted as the real signature");
+});
+
+/* ---- Signature placement (the Senior + WhatsApp skeleton fix): the
+ * signature comes ONLY from the explicit `signature` parameter — sourced
+ * from the app's own signature field — never from anything the AI wrote.
+ * See applyClosingLine's header comment for the bug this fixes: the AI
+ * sometimes produced its own "Regards," (or "Regards:") block, which the
+ * old exact-match "Regards" detection didn't recognize, so a second,
+ * correct "For your kind ..., sir./Regards" pair was appended after it —
+ * duplicate "Regards", signature stranded before the real closing. ---- */
+
+test("applyClosingLine places a provided signature on its own line immediately after the single 'Regards', with no blank line between them", () => {
+  const input = "Assalamualaikum Sir,\nHeartiest congratulations to you on the occasion of your marriage. Wishing you a happy and blessed married life, sir.\nRegards";
+  const out = applyClosingLine(input, "senior", "Capt Shahriar");
+  assert.equal(
+    out,
+    "Assalamualaikum Sir,\nHeartiest congratulations to you on the occasion of your marriage. Wishing you a happy and blessed married life, sir.\n\nFor your kind info, sir.\nRegards\nCapt Shahriar",
+  );
+});
+
+test("applyClosingLine with no signature ends cleanly at 'Regards' — no invented name/rank", () => {
+  const input = "Assalamualaikum Sir,\nHeartiest congratulations to you on the occasion of your marriage. Wishing you a happy and blessed married life, sir.\nRegards";
+  const out = applyClosingLine(input, "senior");
+  assert.equal(
+    out,
+    "Assalamualaikum Sir,\nHeartiest congratulations to you on the occasion of your marriage. Wishing you a happy and blessed married life, sir.\n\nFor your kind info, sir.\nRegards",
+  );
+  assert.ok(!/[A-Za-z]/.test(out.split("Regards")[1] || ""), "nothing follows Regards when no signature is supplied");
+});
+
+test("REGRESSION (the reported bug): the AI's own premature 'Regards,' + signature block is discarded wholesale and rebuilt as a single correct skeleton", () => {
+  // This is exactly the malformed shape the AI produced for the reported
+  // bug: its own "Regards," (comma, not the exact "Regards" this function
+  // used to require) immediately followed by the signature, with no
+  // standard closing line at all yet.
+  const aiRaw =
+    "Assalamualaikum Sir,\n\n\nHeartiest congratulations to you on the occasion of your marriage. Wishing you a happy and blessed married life, sir.\n\n\nRegards,\nCapt Shahriar";
+  const out = applyClosingLine(aiRaw, "senior", "Capt Shahriar");
+  assert.equal(
+    out,
+    "Assalamualaikum Sir,\n\n\nHeartiest congratulations to you on the occasion of your marriage. Wishing you a happy and blessed married life, sir.\n\nFor your kind info, sir.\nRegards\nCapt Shahriar",
+  );
+  assert.equal((out.match(/^Regards$/gim) || []).length, 1, "exactly one 'Regards' line");
+  assert.equal((out.match(/Capt Shahriar/g) || []).length, 1, "signature appears exactly once");
+  assert.equal((out.match(/For your kind/gi) || []).length, 1, "closing line appears exactly once");
+  const lines = out.split("\n");
+  const regardsIdx = lines.findIndex((l) => l === "Regards");
+  assert.equal(lines[regardsIdx + 1], "Capt Shahriar", "signature immediately follows the single Regards, nothing between them");
+});
+
+test("a 'Regards:' or 'Regards.' variant from the AI is recognized as its own closing block and replaced, not stacked on top of", () => {
+  const withColon = applyClosingLine("Assalamualaikum Sir,\nThe training has been completed successfully.\nRegards:\nCapt Shahriar", "senior", "Capt Shahriar");
+  assert.equal((withColon.match(/^Regards$/gim) || []).length, 1);
+  assert.equal((withColon.match(/Capt Shahriar/g) || []).length, 1);
+
+  const withPeriod = applyClosingLine("Assalamualaikum Sir,\nThe training has been completed successfully.\nRegards.\nCapt Shahriar", "senior", "Capt Shahriar");
+  assert.equal((withPeriod.match(/^Regards$/gim) || []).length, 1);
+  assert.equal((withPeriod.match(/Capt Shahriar/g) || []).length, 1);
+});
+
+test("signature placement is idempotent — running applyClosingLine twice with the same signature produces the same result", () => {
+  const input = "Assalamualaikum Sir,\nThe training has been completed successfully.\nRegards";
+  const once = applyClosingLine(input, "senior", "Capt Shahriar");
+  const twice = applyClosingLine(once, "senior", "Capt Shahriar");
+  assert.equal(once, twice);
+});
+
+test("signature is never forced onto a pure acknowledgement that gets no closing line at all", () => {
+  const out = applyClosingLine("Noted, sir.", "senior", "Capt Shahriar");
+  assert.equal(out, "Noted, sir.", "no Regards/closing applies here, so no signature is appended either");
+});
+
+test("a multi-paragraph message still gets the signature only once, at the very end, after the single Regards", () => {
+  const input =
+    "Assalamualaikum Sir,\n" +
+    "1. The convoy departed at 0600 hrs as scheduled.\n" +
+    "2. All checkpoints reported clear.\n" +
+    "3. The convoy arrived at the destination at 0930 hrs with no incidents.\n" +
+    "Regards";
+  const out = applyClosingLine(input, "senior", "Capt Shahriar");
+  const lines = out.split("\n");
+  assert.equal(lines[lines.length - 1], "Capt Shahriar");
+  assert.equal(lines[lines.length - 2], "Regards");
+  assert.equal((out.match(/Capt Shahriar/g) || []).length, 1);
+  assert.equal((out.match(/^Regards$/gim) || []).length, 1);
+});
+
+test("Junior mode: signature still appears exactly once after the single sir-free Regards", () => {
+  const input = "Assalamualaikum Dear,\nThe training has been completed successfully.\nRegards,\nCapt Shahriar";
+  const out = applyClosingLine(input, "junior", "Capt Shahriar");
+  assert.match(out, /For your kind info\.\nRegards\nCapt Shahriar$/);
+  assert.equal((out.match(/^Regards$/gim) || []).length, 1);
+  assert.equal((out.match(/Capt Shahriar/g) || []).length, 1);
+  assert.doesNotMatch(out, /\bsir\b/i);
 });
 
 test("applyClosingLine is idempotent", () => {

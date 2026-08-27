@@ -6,8 +6,13 @@
  *   (1) force filter narrows candidates, not applied until a match exists;
  *   (2) exact JSSDM entry (lookupFullExact — covers explicit entries AND the
  *       already-expanded word-form/grouped-notation forms);
- *   (3) rule-authorized grammatical form — Section 2, Para 0241b(3) plural or
- *       0241b(4) verb-derivative, single words only, via RuleEngine;
+ *   (3) rule-authorized grammatical form, single words only, via RuleEngine,
+ *       tried in this order: Section 2 Para 0241b(3) plural, then Para
+ *       0241b(4) verb-derivative, then Para 0241b(1) composite noun/verb
+ *       (a prefix/suffix plus a part that has its own authorized
+ *       abbreviation — e.g. "minefd" for "minefield", the rule's own worked
+ *       example; see ruleEngine.ts's compositeFromFull for why this is
+ *       tried last and how it avoids over-firing);
  *   (4) sentence position / capitalization is NOT re-derived here: the
  *       abbreviation is always emitted in the exact case Section 16 stores it
  *       in (Para 0241b(8)), regardless of where in the sentence it falls;
@@ -50,7 +55,7 @@ export function runAbbreviate(text: string, force: string | null | undefined): A
     let found: Entry[] | null = lookupFullExact(phrase);
     let ruleInfo: RuleMatch | null = null;
     if (!found && w === 1) {
-      const rf = RuleEngine.pluralFromFull(phrase) || RuleEngine.verbFormFromFull(phrase);
+      const rf = RuleEngine.pluralFromFull(phrase) || RuleEngine.verbFormFromFull(phrase) || RuleEngine.compositeFromFull(phrase);
       if (rf) {
         found = rf.entries;
         ruleInfo = rf;

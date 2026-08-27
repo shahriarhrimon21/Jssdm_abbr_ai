@@ -22,7 +22,7 @@
  *      English/military knowledge.
  */
 import type { Entry, RuleMatch } from "./types.ts";
-import { abbrIndexCS, fullIndex, normFullKey, normSpace } from "./database.ts";
+import { abbrIndexCS, fullIndex, lookupFullExact, normFullKey, normSpace } from "./database.ts";
 
 const NOUN_ELIGIBLE_EXCLUDE: Record<string, 1> = { "Unit of Measurement": 1, "Signal Punctuation": 1 };
 function isSingleWord(s: string): boolean {
@@ -145,10 +145,105 @@ function verbFormFromFull(word: string): RuleMatch | null {
   return null;
 }
 
+/* ---- Composite nouns/verbs: Section 2, Para 0241b(1) --------------------
+   "A composite noun or verb, or one containing a prefix or suffix, may be
+   abbreviated by abbreviating the part for which there is an authorized
+   abbreviation, e.g. mob (mobilize), demob (demobilize), minefd
+   (minefield). Exceptions apply where there is an authorized abbreviation
+   that itself carries the prefix/suffix, e.g. C attk (counter attack)."
+
+   This was previously undocumented in code even though it is one of the
+   21 rules carried in the dataset (RULEBYID.r0241b1) — "minefd" for
+   "minefield" is the manual's OWN worked example for this rule, not a
+   value that should ever be hardcoded as a special case; implementing the
+   general rule is what makes "minefd" (and "demob", the rule's other
+   worked example) fall out correctly, on the same footing as every other
+   composite word the rule covers, and with the same "rule-supported, not
+   explicit" honesty already used by pluralFromFull/verbFormFromFull above.
+
+   Algorithm: for a single-word token with no exact Section 16 entry of its
+   own, try splitting it at every point into [prefix][base], base tried
+   LONGEST first (the more of the word a real dictionary entry accounts
+   for, the more likely the split is the genuine morphological boundary,
+   not a coincidental short substring). A split only counts when `base`
+   itself is a single-word, noun-eligible, non-literal Section 16 entry —
+   the exact same entry-quality filter pluralFromFull already applies.
+
+   Before accepting a naive prefix+baseAbbr concatenation, the rule's own
+   stated EXCEPTION is checked first: if "<prefix> <base>" (with a space)
+   is itself an authorized Section 16 phrase, that phrase's own dedicated
+   abbreviation is used instead — this is what correctly produces "C attk"
+   for "counterattack" typed as one word, rather than the wrong
+   "counterattk" a blind concatenation would produce (confirmed against
+   the dataset: "Counter Attack" -> "C attk" is entry id 418, distinct from
+   the composite-attack path). */
+const COMPOSITE_MIN_PREFIX = 2;
+const COMPOSITE_MIN_BASE = 4;
+
+function compositeBaseEntry(baseLower: string): Entry | null {
+  const hits = (fullIndex.get(normFullKey(baseLower)) || []).filter(
+    (e) => nounEligible(e) && isSingleWord(e.full) && e.notation !== "literal",
+  );
+  return hits.length ? hits[0] : null;
+}
+
+function compositeFromFull(word: string): RuleMatch | null {
+  const w = normSpace(word);
+  if (!w || !isSingleWord(w)) return null;
+  const wl = w.toLowerCase();
+  const maxPrefixLen = wl.length - COMPOSITE_MIN_BASE;
+  if (maxPrefixLen < COMPOSITE_MIN_PREFIX) return null;
+
+  for (let prefixLen = COMPOSITE_MIN_PREFIX; prefixLen <= maxPrefixLen; prefixLen++) {
+    const baseLower = wl.slice(prefixLen);
+    const baseEntry = compositeBaseEntry(baseLower);
+    if (!baseEntry) continue;
+    // Lowercase, not the user's own input casing — per Section 2, Para
+    // 0241b(8) an abbreviation's case is fixed regardless of position/
+    // spelling in the source text (already the behaviour of every other
+    // rule in this file: pluralFromFull/verbFormFromFull always return the
+    // entry's own stored casing, never the input's). The manual's own
+    // composite examples ("mob", "demob", "minefd") are all lowercase, so
+    // the literal prefix portion follows that same fixed convention rather
+    // than mirroring whatever capitalization the user happened to type.
+    const prefixText = wl.slice(0, prefixLen);
+
+    // Rule's own exception: an authorized two-word phrase for "<prefix>
+    // <base>" outranks a generic concatenation of the two abbreviations.
+    const spacedEntries = lookupFullExact(prefixText + " " + baseLower);
+    if (spacedEntries && spacedEntries.length) {
+      const chosen = spacedEntries[0];
+      return {
+        entries: [chosen],
+        abbr: chosen.abbr,
+        rule: "r0241b1",
+        base: baseLower,
+        reason:
+          '"' + prefixText + " " + baseLower + '" is itself explicitly listed ("' + chosen.abbr +
+          '"); Section 2, Para 0241b(1) treats this as the exception it names ("an authorized abbreviation that itself carries the prefix/suffix, e.g. C attk (counter attack)") rather than a generic composite concatenation.',
+      } as RuleMatch;
+    }
+
+    return {
+      entries: [baseEntry],
+      abbr: prefixText + baseEntry.abbr,
+      rule: "r0241b1",
+      base: baseLower,
+      baseAbbr: baseEntry.abbr,
+      reason:
+        '"' + baseLower + '" is explicitly listed ("' + baseEntry.abbr +
+        '"); Section 2, Para 0241b(1) permits abbreviating a composite noun/verb by abbreviating the part for which there is an authorized abbreviation (the manual\'s own example: "minefd" for "minefield") — "' +
+        prefixText + '" is kept as written and "' + baseLower + '" becomes "' + baseEntry.abbr + '", giving "' + prefixText + baseEntry.abbr + '". Rule-supported, not a separately listed explicit entry.',
+    } as RuleMatch;
+  }
+  return null;
+}
+
 export const RuleEngine = {
   pluralFromFull,
   pluralFromAbbr,
   verbFormFromFull,
+  compositeFromFull,
   englishPluralOf,
 };
 

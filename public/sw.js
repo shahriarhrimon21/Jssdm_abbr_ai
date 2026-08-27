@@ -32,7 +32,11 @@
  *    at all — passthrough only.
  */
 
-const CACHE_NAME = "jssdm-runtime-v1";
+const CACHE_NAME = "jssdm-runtime-v2"; // bumped: forces eviction of previously
+// cached favicon/icon/manifest responses (favicon.ico, icon.svg,
+// logo-crest-240.png, manifest.webmanifest) after the logo/icon swap below —
+// see the existing activate handler, which already deletes any cache whose
+// name doesn't match CACHE_NAME.
 const AI_PATH_PREFIX = "/.netlify/functions/";
 
 self.addEventListener("install", (event) => {

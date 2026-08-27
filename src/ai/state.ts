@@ -211,7 +211,11 @@ export function assistantReducer(state: AssistantState, action: AssistantAction)
       //  - applyClosingLine guarantees "For your kind info/permission/
       //    consideration[, sir]." is present, correct (wording matching
       //    state.recipientType), non-duplicated, and immediately before
-      //    "Regards" whenever the message's own content calls for it.
+      //    "Regards" whenever the message's own content calls for it — and
+      //    now also owns the signature: it discards whatever closing/
+      //    signature block the AI produced on its own (unreliable — see
+      //    that file's header) and appends state.signature, and only
+      //    state.signature, on its own line immediately after "Regards".
       //  - applyRecipientEtiquette (Junior only — a no-op for Senior)
       //    forces the exact "Assalamualaikum Dear," opener and scrubs any
       //    stray "sir"/"Dear" the AI left elsewhere, e.g. carried over from
@@ -229,7 +233,9 @@ export function assistantReducer(state: AssistantState, action: AssistantAction)
       // respected.
       const text =
         state.outputMode === "whatsapp"
-          ? ensureGreetingBlankLine(applyRecipientEtiquette(applyClosingLine(action.text, state.recipientType), state.recipientType))
+          ? ensureGreetingBlankLine(
+              applyRecipientEtiquette(applyClosingLine(action.text, state.recipientType, state.signature), state.recipientType),
+            )
           : action.text;
       return {
         ...state,

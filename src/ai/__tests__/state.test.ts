@@ -301,6 +301,74 @@ test("REQUEST_SUCCESS in whatsapp+junior mode forces the Dear opener and a sir-f
   assert.equal(s.aiEditedDraft, s.aiFinal);
 });
 
+/* ---- REGRESSION: Senior + WhatsApp signature-placement bug. The AI's raw
+ * output sometimes produced its own premature "Regards,\n<name>" block
+ * before the deterministic closing line was inserted, causing a duplicated
+ * "Regards" and a misplaced signature. Reproduces the exact reported
+ * input/output through the full REQUEST_SUCCESS pipeline (SET_SIGNATURE +
+ * applyClosingLine + applyRecipientEtiquette + ensureGreetingBlankLine). ---- */
+
+test("REQUEST_SUCCESS in whatsapp+senior mode with a signature set: exactly one Regards, signature placed only at the very end", () => {
+  let s = assistantReducer(initialAssistantState, { type: "SET_OUTPUT_MODE", outputMode: "whatsapp" });
+  s = assistantReducer(s, { type: "SET_SIGNATURE", signature: "Capt Shahriar" });
+  // The AI's raw (buggy) output as reported: its own "Regards," + signature
+  // block, with excess blank lines, and no standard closing line yet.
+  s = assistantReducer(s, {
+    type: "REQUEST_SUCCESS",
+    text:
+      "Assalamualaikum Sir,\n\n\nHeartiest congratulations to you on the occasion of your marriage. Wishing you a happy and blessed married life, sir.\n\n\nRegards,\nCapt Shahriar",
+    userMessage: "congratulation for marriage",
+  });
+  assert.equal(
+    s.aiFinal,
+    "Assalamualaikum Sir,\n\nHeartiest congratulations to you on the occasion of your marriage. Wishing you a happy and blessed married life, sir.\n\nFor your kind info, sir.\nRegards\nCapt Shahriar",
+  );
+  assert.equal((s.aiFinal!.match(/^Regards$/gim) || []).length, 1, "exactly one Regards");
+  assert.equal((s.aiFinal!.match(/Capt Shahriar/g) || []).length, 1, "signature appears exactly once");
+  assert.equal(s.aiEditedDraft, s.aiFinal);
+});
+
+test("REQUEST_SUCCESS in whatsapp+senior mode with no signature set: ends cleanly at Regards, nothing invented", () => {
+  let s = assistantReducer(initialAssistantState, { type: "SET_OUTPUT_MODE", outputMode: "whatsapp" });
+  s = assistantReducer(s, {
+    type: "REQUEST_SUCCESS",
+    text: "Assalamualaikum Sir,\n\nHeartiest congratulations to you on the occasion of your marriage. Wishing you a happy and blessed married life, sir.\n\nRegards",
+    userMessage: "congratulation for marriage",
+  });
+  assert.equal(
+    s.aiFinal,
+    "Assalamualaikum Sir,\n\nHeartiest congratulations to you on the occasion of your marriage. Wishing you a happy and blessed married life, sir.\n\nFor your kind info, sir.\nRegards",
+  );
+});
+
+test("REQUEST_SUCCESS regeneration with a signature never duplicates Regards or the signature across repeated generations", () => {
+  let s = assistantReducer(initialAssistantState, { type: "SET_OUTPUT_MODE", outputMode: "whatsapp" });
+  s = assistantReducer(s, { type: "SET_SIGNATURE", signature: "Capt Shahriar" });
+  const raw =
+    "Assalamualaikum Sir,\n\nHeartiest congratulations to you on the occasion of your marriage. Wishing you a happy and blessed married life, sir.\n\nRegards,\nCapt Shahriar";
+  for (let i = 0; i < 3; i++) {
+    s = assistantReducer(s, { type: "REQUEST_SUCCESS", text: raw, userMessage: "congratulation for marriage" });
+    assert.equal((s.aiFinal!.match(/^Regards$/gim) || []).length, 1, `pass ${i}: exactly one Regards`);
+    assert.equal((s.aiFinal!.match(/Capt Shahriar/g) || []).length, 1, `pass ${i}: signature appears exactly once`);
+  }
+});
+
+test("REQUEST_SUCCESS in whatsapp+junior mode with a signature set: signature still appears once, after the sir-free Regards", () => {
+  let s = assistantReducer(initialAssistantState, { type: "SET_OUTPUT_MODE", outputMode: "whatsapp" });
+  s = assistantReducer(s, { type: "SET_RECIPIENT_TYPE", recipientType: "junior" });
+  s = assistantReducer(s, { type: "SET_SIGNATURE", signature: "Capt Shahriar" });
+  s = assistantReducer(s, {
+    type: "REQUEST_SUCCESS",
+    text: "Assalamualaikum Sir,\n1. After firing, man and materials are all correct, sir.\nRegards,\nCapt Shahriar",
+    userMessage: "go",
+  });
+  assert.match(s.aiFinal!, /^Assalamualaikum Dear,/);
+  assert.match(s.aiFinal!, /For your kind info\.\nRegards\nCapt Shahriar$/);
+  assert.equal((s.aiFinal!.match(/^Regards$/gim) || []).length, 1);
+  assert.equal((s.aiFinal!.match(/Capt Shahriar/g) || []).length, 1);
+  assert.doesNotMatch(s.aiFinal!, /\bsir\b/i);
+});
+
 test("REQUEST_SUCCESS in text mode is unaffected by recipientType (no WhatsApp deterministic passes run)", () => {
   let s = assistantReducer(initialAssistantState, { type: "SET_RECIPIENT_TYPE", recipientType: "junior" });
   s = assistantReducer(s, { type: "REQUEST_SUCCESS", text: "Plain generated text, sir.", userMessage: "go" });

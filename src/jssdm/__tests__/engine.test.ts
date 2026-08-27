@@ -116,6 +116,81 @@ test("Support/Supported: both explicitly listed variations, both verified", () =
   assert.equal(r.rows[1].status, "ok");
 });
 
+/* ---- Composite nouns/verbs: Section 2, Para 0241b(1) — previously carried
+ * in the rules dataset (RULEBYID.r0241b1) but never implemented in code.
+ * "minefd" for "minefield" is the manual's OWN worked example for this
+ * rule (not a value that should ever be hardcoded); these tests exercise
+ * the GENERAL rule, not a "minefield" special case — the manual's other
+ * worked example ("demob" for "demobilize") and the rule's own stated
+ * exception ("C attk" for "counter attack") are covered too, so a future
+ * change can't silently narrow this back down to one hardcoded word. */
+test('CRITICAL: "minefield" abbreviates to "minefd" via Section 2, Para 0241b(1) — the manual\'s own worked example for this rule', () => {
+  const r = runAbbreviate("The minefield was cleared.", "all");
+  const row = r.rows.find((x) => x.original.toLowerCase() === "minefield")!;
+  assert.ok(row, "expected \"minefield\" to be matched at all");
+  assert.equal(row.abbr, "minefd");
+  assert.equal(row.status, "rule", "rule-supported (0241b1), not an explicit Section 16 entry");
+  assert.match(row.source, /0241b\(1\)/);
+  assert.match(row.source, /Field/i, "the reason should trace back to the \"Field\" -> \"fd\" entry it was derived from");
+});
+
+test('"minefield" is case-insensitive and works capitalized/mid-sentence, same as any other rule-supported term', () => {
+  assert.equal(runAbbreviate("Minefield ahead.", "all").rows[0].abbr, "minefd", "capitalized");
+  assert.equal(runAbbreviate("MINEFIELD MARKED.", "all").rows[0].abbr, "minefd", "all-caps input");
+  const midSentence = runAbbreviate("Move carefully around the minefield.", "all");
+  const row = midSentence.rows.find((r) => r.original.toLowerCase() === "minefield")!;
+  assert.ok(row, "mid-sentence");
+  assert.equal(row.abbr, "minefd", "mid-sentence");
+});
+
+test('the manual\'s OTHER Para 0241b(1) worked example — "demob" for "demobilize" — also resolves correctly', () => {
+  const r = runAbbreviate("Troops will demobilize tomorrow.", "all");
+  const row = r.rows.find((x) => x.original.toLowerCase() === "demobilize")!;
+  assert.ok(row);
+  assert.equal(row.abbr, "demob");
+  assert.equal(row.status, "rule");
+  assert.match(row.source, /0241b\(1\)/);
+});
+
+test('Para 0241b(1)\'s own stated EXCEPTION — "counterattack" typed as one word resolves to "C attk" (the dedicated Counter Attack entry), not a naive "counterattk" concatenation', () => {
+  const r = runAbbreviate("The unit launched a counterattack.", "all");
+  const row = r.rows.find((x) => x.original.toLowerCase() === "counterattack")!;
+  assert.ok(row);
+  assert.equal(row.abbr, "C attk");
+  assert.notEqual(row.abbr, "counterattk", "must never fall back to naive prefix+abbr concatenation when a dedicated authorized phrase exists");
+});
+
+test('"counter attack" typed as two words (the normal case) is completely unaffected by the composite rule', () => {
+  const r = runAbbreviate("The counter attack was repelled.", "all");
+  assert.equal(r.rows[0].original, "counter attack");
+  assert.equal(r.rows[0].abbr, "C attk");
+  assert.equal(r.rows[0].status, "ok", "still the ordinary explicit multi-word match, not routed through the composite rule");
+});
+
+test("composite rule never shadows an existing exact Section 16 entry", () => {
+  // "Accommodation" is itself an explicit entry ("accn"); nothing about it
+  // should ever be routed through the composite fallback.
+  const r = runAbbreviate("Accommodation was arranged.", "all");
+  assert.equal(r.rows[0].abbr, "accn");
+  assert.equal(r.rows[0].status, "ok");
+});
+
+test("composite rule declines a too-short word rather than guessing (minimum prefix/base guardrail)", () => {
+  // "field" alone is already an exact entry (caught before the composite
+  // rule is ever reached) and nothing shorter than the guardrail floor
+  // should be decomposed — e.g. a short, non-composite word must be left
+  // untouched rather than sliced into an arbitrary prefix + coincidental
+  // base match.
+  const r = runAbbreviate("Field report submitted.", "all");
+  assert.equal(r.rows[0].abbr, "fd");
+  assert.equal(r.rows[0].status, "ok", "the exact entry, not a rule-derived guess");
+});
+
+test("composite rule leaves an unrelated ordinary word untouched when no real composite reading exists", () => {
+  const r = runAbbreviate("The database was updated.", "all");
+  assert.equal(r.rows.length, 0, '"database" has no exact entry, no plural/verb form, and no valid composite split — must stay plain text, not a fabricated guess');
+});
+
 /* ---- De-abbreviate direction ---- */
 test("de-abbreviate: pers -> Personnel/Personal shown as ambiguous (both candidates listed)", () => {
   const r = runDeabbreviate("The pers arrived.", "all");
