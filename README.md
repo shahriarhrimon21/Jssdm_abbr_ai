@@ -101,11 +101,27 @@ vercel dev                   # serves the app AND the function together
 ## Testing
 
 ```bash
-npm run test            # engine + AI-state regression suite (node:test)
+npm run test            # engine + AI-state + AI-proxy regression suite
 npm run typecheck       # tsc --noEmit
 npm run verify:render   # server-renders every page/component, catches
                          # JSX/import errors without a full build
 ```
+
+`npm run test` is actually two `node:test` runs chained together, not one —
+worth knowing if you ever edit it. The JSSDM engine and AI-state tests run
+under Node's own native TypeScript-stripping (`node --test`), which
+requires an explicit `.ts` extension on every relative import — the
+convention used almost everywhere in this codebase. `api/_lib/handler.ts`
+and its entry points (`api/ai.ts`, `netlify/functions/ai.ts`) are the one
+deliberate exception: their cross-file imports have NO extension, because
+Vercel's Node.js Function builder transpiles files individually and does
+NOT rewrite a literal ".ts" to ".js" in the compiled output's import
+specifiers — a real production bug that surfaced as `Error
+[ERR_MODULE_NOT_FOUND]` in Vercel's own Function Logs. Since Node's native
+loader can't resolve those extensionless imports, their tests run through
+`tsx --test` instead, which (like real bundlers) tries multiple extensions
+automatically. See `api/_lib/handler.ts`'s header comment for the full
+story if you touch either of these files.
 
 See **Verification status** below for exactly what has and hasn't been run
 in the environment this project was authored in, and why.

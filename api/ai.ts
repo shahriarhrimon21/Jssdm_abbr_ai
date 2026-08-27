@@ -53,6 +53,19 @@
  * status, setHeader, send) are Vercel's documented stable contract for
  * this runtime.
  *
+ * CONFIRMED ROOT CAUSE of the "unexpected response (status 500)" this
+ * produced right after the Edge->Node switch above: Vercel's own Function
+ * Logs showed `Error [ERR_MODULE_NOT_FOUND]: Cannot find module
+ * '/var/task/api/_lib/handler.ts' imported from /var/task/api/ai.js`.
+ * Vercel's Node builder transpiles each .ts file individually rather than
+ * bundling them into one file, and does not rewrite ".ts" to ".js" in the
+ * import specifiers it leaves in the compiled output — so the import
+ * below crashed at module load, before this file's own try/catch (or
+ * even its function body) ever ran, which is exactly why hardening the
+ * function body alone didn't fix it. The fix is dropping the ".ts" from
+ * the import right below — see ./_lib/handler.ts's header for the full
+ * explanation of why that file's own internal imports needed the same fix.
+ *
  * Requires the SAME environment variables as Netlify, set separately in
  * this Vercel project's own Settings -> Environment Variables (Vercel and
  * Netlify each keep their own env vars — setting a key on one host does
@@ -60,7 +73,7 @@
  * OPENAI_API_KEY, ANTHROPIC_API_KEY (Claude is scaffolded only, not yet
  * implemented — see api/_lib/providers/claude.ts).
  */
-import handleAIRequest from "./_lib/handler.ts";
+import handleAIRequest from "./_lib/handler";
 
 /**
  * Vercel's Node runtime auto-parses a JSON request body into req.body for

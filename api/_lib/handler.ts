@@ -23,6 +23,26 @@
  * file is the ONLY implementation — see both entry files' comments for
  * the full picture of why two hosts exist and how each one calls in.
  *
+ * IMPORTANT — the imports below have NO ".ts" extension, unlike almost
+ * every other relative import in this codebase (which use an explicit
+ * ".ts" because Node's native TypeScript-stripping test runner requires
+ * one on relative ESM specifiers). This file is the one exception, and
+ * removing the extension here was a real, confirmed production fix, not
+ * a style choice: Vercel's Node.js Function builder transpiles each .ts
+ * file individually rather than bundling them into one file, and does
+ * NOT rewrite ".ts" to ".js" in the import specifiers it leaves in the
+ * compiled output — so a deployed api/ai.js still literally imported
+ * "./_lib/handler.ts", a file that doesn't exist at runtime (only the
+ * compiled handler.js does), which crashed every request with
+ * `Error [ERR_MODULE_NOT_FOUND]: Cannot find module
+ * '/var/task/api/_lib/handler.ts'` — confirmed directly from Vercel's own
+ * Function Logs. An extensionless specifier lets Node's module resolver
+ * fill in .js itself, which works correctly on both Vercel and Netlify
+ * (whose esbuild-based bundler was always fine with either form). Local
+ * tests for these files run via `tsx` rather than Node's native
+ * `--experimental-strip-types` specifically so this extensionless form
+ * still resolves in development — see package.json's "test" script.
+ *
  * Request body: { provider?: "gemini", systemPrompt: string,
  *                  messages: {role:"user"|"assistant", content:string}[],
  *                  maxOutputTokens?: number }
@@ -31,11 +51,11 @@
  *   user-safe message; never a stack trace, never the upstream raw body,
  *   never anything that could contain a key.
  */
-import type { AIProvider } from "./providers/types.ts";
-import { geminiProvider } from "./providers/gemini.ts";
-import { openaiProvider } from "./providers/openai.ts";
-import { groqProvider } from "./providers/groq.ts";
-import { claudeProvider } from "./providers/claude.ts";
+import type { AIProvider } from "./providers/types";
+import { geminiProvider } from "./providers/gemini";
+import { openaiProvider } from "./providers/openai";
+import { groqProvider } from "./providers/groq";
+import { claudeProvider } from "./providers/claude";
 
 const PROVIDERS: Record<string, AIProvider> = {
   gemini: geminiProvider,
