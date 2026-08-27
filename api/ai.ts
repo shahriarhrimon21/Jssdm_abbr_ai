@@ -58,13 +58,18 @@
  * Logs showed `Error [ERR_MODULE_NOT_FOUND]: Cannot find module
  * '/var/task/api/_lib/handler.ts' imported from /var/task/api/ai.js`.
  * Vercel's Node builder transpiles each .ts file individually rather than
- * bundling them into one file, and does not rewrite ".ts" to ".js" in the
- * import specifiers it leaves in the compiled output — so the import
+ * bundling them into one file, and does not rewrite a ".ts" extension in
+ * the import specifiers it leaves in the compiled output — so the import
  * below crashed at module load, before this file's own try/catch (or
  * even its function body) ever ran, which is exactly why hardening the
- * function body alone didn't fix it. The fix is dropping the ".ts" from
- * the import right below — see ./_lib/handler.ts's header for the full
- * explanation of why that file's own internal imports needed the same fix.
+ * function body alone didn't fix it. A follow-up attempt removed the
+ * extension entirely, assuming Node would infer ".js" the way a bundler
+ * does — also wrong, confirmed by the SAME error with no extension at all
+ * this time (`Cannot find module '/var/task/api/_lib/handler'`): Node's
+ * native ESM resolver never infers extensions. The import below uses
+ * ".js" — the actual correct, standard TypeScript-for-Node-ESM
+ * convention — see ./_lib/handler.ts's header for the full explanation
+ * of why that's correct and how it resolves locally too.
  *
  * Requires the SAME environment variables as Netlify, set separately in
  * this Vercel project's own Settings -> Environment Variables (Vercel and
@@ -73,7 +78,7 @@
  * OPENAI_API_KEY, ANTHROPIC_API_KEY (Claude is scaffolded only, not yet
  * implemented — see api/_lib/providers/claude.ts).
  */
-import handleAIRequest from "./_lib/handler";
+import handleAIRequest from "./_lib/handler.js";
 
 /**
  * Vercel's Node runtime auto-parses a JSON request body into req.body for

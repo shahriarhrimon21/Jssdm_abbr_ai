@@ -113,15 +113,23 @@ under Node's own native TypeScript-stripping (`node --test`), which
 requires an explicit `.ts` extension on every relative import — the
 convention used almost everywhere in this codebase. `api/_lib/handler.ts`
 and its entry points (`api/ai.ts`, `netlify/functions/ai.ts`) are the one
-deliberate exception: their cross-file imports have NO extension, because
-Vercel's Node.js Function builder transpiles files individually and does
-NOT rewrite a literal ".ts" to ".js" in the compiled output's import
-specifiers — a real production bug that surfaced as `Error
-[ERR_MODULE_NOT_FOUND]` in Vercel's own Function Logs. Since Node's native
-loader can't resolve those extensionless imports, their tests run through
-`tsx --test` instead, which (like real bundlers) tries multiple extensions
-automatically. See `api/_lib/handler.ts`'s header comment for the full
-story if you touch either of these files.
+deliberate exception: their cross-file imports use a `.js` extension even
+though the files on disk are `.ts` — the standard convention for a
+TypeScript project that runs as real Node ESM (this one does — see
+`"type": "module"` in package.json). Vercel's Node.js Function builder
+transpiles files individually rather than bundling them, and copies each
+import specifier through to the compiled output unchanged; writing `.js`
+in the source means it's already correct post-compile, matching the real
+compiled file. Two other forms were tried and both failed in production,
+confirmed from Vercel's own Function Logs each time: a literal `.ts`
+extension (`Cannot find module '.../handler.ts'` — never rewritten to
+`.js`), and no extension at all (`Cannot find module '.../handler'` —
+Node's native ESM resolver never infers extensions, unlike a bundler or
+CommonJS `require()`). Since Node's native loader doesn't understand a
+`.js` specifier resolving to a sibling `.ts` file, these two files' tests
+run through `tsx --test` instead, which (like the TypeScript compiler
+itself) understands that mapping. See `api/_lib/handler.ts`'s header
+comment for the full story if you touch either of these files.
 
 See **Verification status** below for exactly what has and hasn't been run
 in the environment this project was authored in, and why.
