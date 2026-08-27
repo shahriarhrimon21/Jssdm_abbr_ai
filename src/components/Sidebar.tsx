@@ -26,7 +26,7 @@ export default function Sidebar({
   return (
     <nav className="sidebar" aria-label="Main">
       <div className="brandbar">
-        <img className="logo" src="/logo-mark.svg" alt="" width={32} height={32} />
+        <img className="logo" src="/logo-mark.png" alt="" width={32} height={32} />
         <span className="wm">
           <b>JSSDM ABBR StaffAI</b>
           <span>AI-Powered Staff Work Assistant</span>

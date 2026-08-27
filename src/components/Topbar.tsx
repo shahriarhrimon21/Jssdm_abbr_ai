@@ -48,7 +48,7 @@ export default function Topbar({
 
       {/* On phones the sidebar is gone, so the top bar carries the mark. */}
       <span className="brandbar-mobile show-mobile">
-        <img src="/logo-mark.svg" alt="" width={26} height={26} />
+        <img src="/logo-mark.png" alt="" width={26} height={26} />
       </span>
 
       <h2 className="page-title">{title}</h2>

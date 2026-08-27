@@ -61,7 +61,7 @@ export default function Dashboard({ onNavigate }: { onNavigate: (v: ViewId) => v
   return (
     <div>
       <div className="home-band">
-        <img className="home-band-crest" src="/logo-mark.svg" alt="" width={48} height={48} />
+        <img className="home-band-crest" src="/logo-mark.png" alt="" width={48} height={48} />
         <div className="home-band-text">
           <b>JSSDM ABBR StaffAI</b>
           <span>AI-Powered Staff Work Assistant</span>
