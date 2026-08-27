@@ -1,6 +1,13 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { classifyClosingIntent, applyClosingLine, ensureGreetingBlankLine, CLOSING_LINES } from "../whatsappClosing.ts";
+import {
+  classifyClosingIntent,
+  applyClosingLine,
+  applyRecipientEtiquette,
+  ensureGreetingBlankLine,
+  CLOSING_LINES,
+  JUNIOR_CLOSING_LINES,
+} from "../whatsappClosing.ts";
 
 /* ---- classifyClosingIntent: the worked examples from the request itself ---- */
 
@@ -199,4 +206,121 @@ test("ensureGreetingBlankLine is idempotent", () => {
   const once = ensureGreetingBlankLine("Assalamualaikum Sir,\nThe patrol has reached the location.\nRegards");
   const twice = ensureGreetingBlankLine(once);
   assert.equal(once, twice);
+});
+
+/* ---- Senior/Junior recipient type — applyClosingLine ---- */
+
+test("applyClosingLine defaults to Senior ('sir') wording when recipientType is omitted, unchanged from before the toggle existed", () => {
+  const input = "Assalamualaikum sir,\nThe training has been completed successfully.\nRegards";
+  const withDefault = applyClosingLine(input);
+  const explicitSenior = applyClosingLine(input, "senior");
+  assert.equal(withDefault, explicitSenior);
+  assert.match(withDefault, /For your kind info, sir\.\nRegards$/);
+});
+
+test("exact required Junior wording — no 'sir', 'info' not 'information', 'consideration' not 'opinion'", () => {
+  assert.equal(JUNIOR_CLOSING_LINES.info, "For your kind info.");
+  assert.equal(JUNIOR_CLOSING_LINES.permission, "For your kind permission.");
+  assert.equal(JUNIOR_CLOSING_LINES.consideration, "For your kind consideration.");
+});
+
+test("applyClosingLine in Junior mode inserts the sir-free info closing", () => {
+  const input = "Assalamualaikum Dear,\nThe training has been completed successfully.\nRegards";
+  const out = applyClosingLine(input, "junior");
+  assert.equal(out, "Assalamualaikum Dear,\nThe training has been completed successfully.\n\nFor your kind info.\nRegards");
+});
+
+test("applyClosingLine in Junior mode replaces a Senior-worded closing line rather than stacking both", () => {
+  const input = "Assalamualaikum Dear,\nThe training has been completed successfully.\nFor your kind info, sir.\nRegards";
+  const out = applyClosingLine(input, "junior");
+  const occurrences = (out.match(/For your kind/g) || []).length;
+  assert.equal(occurrences, 1);
+  assert.match(out, /For your kind info\.\nRegards$/);
+  assert.doesNotMatch(out, /sir/i);
+});
+
+test("applyClosingLine in Junior mode does NOT force a line onto a pure acknowledgement, same as Senior", () => {
+  const input = "Noted.";
+  assert.equal(applyClosingLine(input, "junior"), "Noted.");
+});
+
+test("applyClosingLine is idempotent in Junior mode too", () => {
+  const input = "Assalamualaikum Dear,\nThe party has reached the location at 1600 hrs.\nRegards";
+  const once = applyClosingLine(input, "junior");
+  const twice = applyClosingLine(once, "junior");
+  assert.equal(once, twice);
+});
+
+/* ---- Senior/Junior recipient type — applyRecipientEtiquette ---- */
+
+test("applyRecipientEtiquette is a no-op for Senior (and when recipientType is omitted)", () => {
+  const input = "Assalamualaikum Sir,\nThe training has been completed successfully.\nFor your kind info, sir.\nRegards";
+  assert.equal(applyRecipientEtiquette(input), input);
+  assert.equal(applyRecipientEtiquette(input, "senior"), input);
+});
+
+test("applyRecipientEtiquette forces the exact 'Assalamualaikum Dear,' opener, overriding whatever greeting the AI produced", () => {
+  const input = "Assalamualaikum Sir,\nThe training has been completed successfully.\nRegards";
+  const out = applyRecipientEtiquette(input, "junior");
+  assert.match(out, /^Assalamualaikum Dear,/);
+});
+
+test("applyRecipientEtiquette inserts the opener when the message has no recognizable greeting at all", () => {
+  const out = applyRecipientEtiquette("The training has been completed successfully.\nRegards", "junior");
+  assert.equal(out, "Assalamualaikum Dear,\n\nThe training has been completed successfully.\nRegards");
+});
+
+test("applyRecipientEtiquette strips a stray ', sir' carried over from a Senior-style draft, preserving the trailing period", () => {
+  const input = "Assalamualaikum Sir,\n1. After firing, man and materials are all correct, sir.\n2. Total firers: 106.\nRegards";
+  const out = applyRecipientEtiquette(input, "junior");
+  assert.match(out, /1\. After firing, man and materials are all correct\.$/m);
+  assert.doesNotMatch(out, /sir/i);
+});
+
+test("applyRecipientEtiquette never touches the enforced greeting line itself while scrubbing the rest", () => {
+  // The greeting is REPLACED outright (not scrubbed) — this pins that the
+  // scrub pass only ever runs on lines after index 0.
+  const out = applyRecipientEtiquette("Assalamualaikum Sir,\nNoted, sir.\nRegards", "junior");
+  const lines = out.split("\n");
+  assert.equal(lines[0], "Assalamualaikum Dear,");
+});
+
+test("applyRecipientEtiquette removes a repeated 'Dear' from the body without touching the opener", () => {
+  const out = applyRecipientEtiquette("Assalamualaikum Sir,\nDear, please note the schedule has changed.\nRegards", "junior");
+  const lines = out.split("\n");
+  assert.equal(lines[0], "Assalamualaikum Dear,");
+  assert.doesNotMatch(lines.slice(1).join("\n"), /Dear/);
+});
+
+test("applyRecipientEtiquette is idempotent", () => {
+  const input = "Assalamualaikum Sir,\n1. Kote and ammo guard are sealed, sir.\nRegards";
+  const once = applyRecipientEtiquette(input, "junior");
+  const twice = applyRecipientEtiquette(once, "junior");
+  assert.equal(once, twice);
+});
+
+/* ---- End-to-end: applyClosingLine + applyRecipientEtiquette combined,
+ * matching the exact worked example from the Senior/Junior toggle spec. ---- */
+
+test("Senior vs Junior on the same firing-status input — worked example from the spec", () => {
+  const aiDraft =
+    "Assalamualaikum Sir,\n" +
+    "1. After firing, man and materials are all correct, sir.\n" +
+    "2. Total firers: 106.\n" +
+    "3. Total ammo fired: 1108.\n" +
+    "4. Kote and ammo guard are sealed, sir.\n" +
+    "Regards";
+
+  const senior = applyRecipientEtiquette(applyClosingLine(aiDraft, "senior"), "senior");
+  assert.match(senior, /^Assalamualaikum Sir,/);
+  assert.match(senior, /1\. After firing, man and materials are all correct, sir\./);
+  assert.match(senior, /4\. Kote and ammo guard are sealed, sir\./);
+  assert.match(senior, /For your kind info, sir\.\nRegards$/);
+
+  const junior = applyRecipientEtiquette(applyClosingLine(aiDraft, "junior"), "junior");
+  assert.match(junior, /^Assalamualaikum Dear,/);
+  assert.match(junior, /1\. After firing, man and materials are all correct\./);
+  assert.match(junior, /4\. Kote and ammo guard are sealed\./);
+  assert.match(junior, /For your kind info\.\nRegards$/);
+  assert.doesNotMatch(junior, /\bsir\b/i);
 });

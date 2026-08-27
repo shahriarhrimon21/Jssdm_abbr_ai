@@ -14,25 +14,53 @@
  * once, at generation time (see ai/state.ts's REQUEST_SUCCESS) — never on
  * every keystroke while the user is editing, so a deliberate manual edit or
  * removal afterward is respected rather than silently overwritten.
+ *
+ * Recipient type (Senior/Junior — see whatsappStyle.ts's RecipientType):
+ * applyClosingLine below takes an optional `recipientType` (default
+ * "senior", so every pre-existing call site keeps its exact original
+ * behaviour) and picks the matching closing-line wording — the three
+ * "sir"-suffixed lines for Senior, or their "sir"-free counterparts
+ * (JUNIOR_CLOSING_LINES) for Junior. applyRecipientEtiquette, further down
+ * this file, is the companion pass that forces the exact "Assalamualaikum
+ * Dear," opener and scrubs any stray "sir"/"Dear" the AI left elsewhere in
+ * the message when Junior is selected — a no-op for Senior, same "prompt
+ * guidance + deterministic guarantee" split as the closing line itself.
  */
+import type { RecipientType } from "./whatsappStyle.ts";
 
 export type ClosingIntent = "info" | "permission" | "consideration" | null;
 
-/** Exact required wording (Part 12) — lowercase "sir", "info" not
- *  "information", "consideration" (never "opinion") for the opinion/
- *  decision case. */
+/** Exact required wording (Part 12) for a SENIOR recipient — lowercase
+ *  "sir", "info" not "information", "consideration" (never "opinion") for
+ *  the opinion/decision case. */
 export const CLOSING_LINES: Record<Exclude<ClosingIntent, null>, string> = {
   info: "For your kind info, sir.",
   permission: "For your kind permission, sir.",
   consideration: "For your kind consideration, sir.",
 };
 
+/** Same three lines, worded for a JUNIOR recipient — identical wording
+ *  minus the ", sir" (Part 2B of the Senior/Junior toggle spec: no 'sir'
+ *  anywhere outside the greeting when addressing a junior). */
+export const JUNIOR_CLOSING_LINES: Record<Exclude<ClosingIntent, null>, string> = {
+  info: "For your kind info.",
+  permission: "For your kind permission.",
+  consideration: "For your kind consideration.",
+};
+
+function closingLineFor(intent: Exclude<ClosingIntent, null>, recipientType: RecipientType): string {
+  return recipientType === "junior" ? JUNIOR_CLOSING_LINES[intent] : CLOSING_LINES[intent];
+}
+
 /** Matches any of the three closing lines regardless of which one, plus the
  *  disallowed variant wordings ("information", "opinion") so a wrong or
  *  duplicated AI-produced line is recognized and removed, not just the
  *  exact-correct one. Deliberately NOT anchored to a fixed capitalization of
- *  "Sir"/"sir" — the AI may emit either. */
-const CLOSING_LINE_RE = /^\s*for your kind (?:info(?:rmation)?|permission|consideration|opinion)\s*,?\s*sir\.?\s*$/i;
+ *  "Sir"/"sir" — the AI may emit either. The trailing ", sir" is OPTIONAL
+ *  (unlike the original Senior-only version of this regex) so a
+ *  Junior-worded line ("For your kind info.", no "sir") is recognized and
+ *  replaceable/de-duplicatable exactly the same way a Senior-worded one is. */
+const CLOSING_LINE_RE = /^\s*for your kind (?:info(?:rmation)?|permission|consideration|opinion)(?:,?\s*sir)?\.?\s*$/i;
 
 const REGARDS_RE = /^\s*regards\.?\s*$/i;
 
@@ -103,8 +131,13 @@ export function classifyClosingIntent(bodyText: string): ClosingIntent {
  * exactly the right place. Idempotent: running it twice on its own output
  * produces the same result, since it always strips every existing closing
  * candidate before deciding what (if anything) belongs there.
+ *
+ * `recipientType` defaults to "senior" — every pre-existing call site keeps
+ * producing exactly the same ", sir."-suffixed lines as before the Senior/
+ * Junior toggle existed; only an explicit "junior" caller gets the
+ * sir-free wording (JUNIOR_CLOSING_LINES via closingLineFor).
  */
-export function applyClosingLine(message: string): string {
+export function applyClosingLine(message: string, recipientType: RecipientType = "senior"): string {
   if (message == null) return message;
   if (!message.trim()) return message;
 
@@ -132,7 +165,7 @@ export function applyClosingLine(message: string): string {
     return withoutClosing.join("\n");
   }
 
-  const correctLine = CLOSING_LINES[intent];
+  const correctLine = closingLineFor(intent, recipientType);
   const out = withoutClosing.slice();
   const regardsIdx = out.findIndex((l) => REGARDS_RE.test(l));
 
@@ -193,4 +226,76 @@ export function ensureGreetingBlankLine(message: string): string {
   if (rest.length === 0) return message; // a greeting-only message has nothing to separate
 
   return [lines[0], "", ...rest].join("\n");
+}
+
+/**
+ * Junior-recipient etiquette pass (Part 2B of the Senior/Junior toggle
+ * spec). A no-op for "senior" — returns the message unchanged, which is
+ * what makes Senior a safe default that preserves pre-existing behaviour
+ * for current users (Part 2A/3).
+ *
+ * For "junior", two jobs — both because the AI's own compliance with these
+ * two specific rules is not reliable enough on its own to skip a
+ * deterministic guarantee, the same rationale as applyClosingLine above:
+ *
+ *  1. Force the opening line to read EXACTLY "Assalamualaikum Dear," —
+ *     never whatever greeting the AI carried over from the user's own
+ *     draft, which may itself be a message copy-pasted from one originally
+ *     meant for a senior ("Assalamualaikum Sir," and all).
+ *  2. Strip any stray "sir"/"Dear" the AI still left in the body or
+ *     closing. applyClosingLine already produces a correct, sir-free
+ *     closing line for junior, so this is a backstop for anywhere else the
+ *     word could have leaked in — most commonly a numbered point that
+ *     echoes the user's own "..., sir" wording from their raw input.
+ *
+ * Deliberately called AFTER applyClosingLine (so the closing line is
+ * already in its final, correct position and wording before this runs) and
+ * BEFORE ensureGreetingBlankLine (so the blank-line pass sees the final
+ * "Assalamualaikum Dear," opener) — see ai/state.ts's REQUEST_SUCCESS for
+ * the exact ordering.
+ *
+ * Idempotent: the greeting line is *replaced* outright rather than
+ * scrubbed, so a second pass produces the same "Assalamualaikum Dear,"
+ * again; the scrub itself finds nothing left to remove once run once.
+ */
+export function applyRecipientEtiquette(message: string, recipientType: RecipientType = "senior"): string {
+  if (message == null) return message;
+  if (!message.trim()) return message;
+  if (recipientType !== "junior") return message;
+
+  let lines = message.split(/\r?\n/);
+
+  if (lines.length > 0 && isGreetingLine(lines[0])) {
+    lines[0] = "Assalamualaikum Dear,";
+  } else {
+    // No recognizable greeting to override — insert the required opener
+    // rather than leaving the message to start mid-body (Part 2B: "Start
+    // the message with: Assalamualaikum Dear,").
+    lines = ["Assalamualaikum Dear,", "", ...lines];
+  }
+
+  // Scrub every line EXCEPT the greeting itself (index 0), which was just
+  // replaced outright above and so has nothing left in it to strip.
+  lines = lines.map((line, i) => (i === 0 ? line : stripSirAndDear(line)));
+
+  return lines.join("\n");
+}
+
+/** Removes stray "sir"/"Dear" honorifics from a single line, cleaning up the
+ *  punctuation/whitespace left behind so the result reads naturally instead
+ *  of leaving a dangling comma or double space. Word-boundary matched
+ *  throughout so it never touches a word merely containing "sir" as a
+ *  substring. The common case in practice — "<point>, sir." carried over
+ *  from a Senior-style draft — is handled by the first replacement alone,
+ *  which removes the comma along with the word so the trailing period lands
+ *  directly on the preceding word (e.g. "...correct, sir." -> "...correct.");
+ *  the remaining replacements are backstops for less common phrasings. */
+function stripSirAndDear(line: string): string {
+  let out = line;
+  out = out.replace(/\s*,\s*\bsir\b/gi, ""); // ", sir" — the common mid/end-of-sentence form
+  out = out.replace(/\bsir\b/gi, ""); // any remaining bare "sir" (no leading comma)
+  out = out.replace(/\bDear\b,?/g, ""); // a stray repeated "Dear" in the body
+  out = out.replace(/[ \t]{2,}/g, " "); // collapse the double space left behind
+  out = out.replace(/\s+([.,!?])/g, "$1"); // no space before punctuation
+  return out.trim();
 }

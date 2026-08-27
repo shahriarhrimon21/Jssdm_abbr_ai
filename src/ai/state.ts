@@ -83,8 +83,8 @@
  */
 import type { ChatMessage } from "./client.ts";
 import type { AssistantMode } from "./prompts.ts";
-import type { OutputMode } from "./whatsappStyle.ts";
-import { applyClosingLine, ensureGreetingBlankLine } from "./whatsappClosing.ts";
+import type { OutputMode, RecipientType } from "./whatsappStyle.ts";
+import { applyClosingLine, applyRecipientEtiquette, ensureGreetingBlankLine } from "./whatsappClosing.ts";
 import type { Span } from "../jssdm/types.ts";
 
 export interface AssistantState {
@@ -92,6 +92,15 @@ export interface AssistantState {
   tone: string;
   customTone: string;
   outputMode: OutputMode;
+  /** Senior/Junior recipient-type toggle — a session-level "settings" field
+   *  (same treatment as mode/tone/outputMode/signature below: preserved
+   *  across RESET, not part of a saved message-history record) that governs
+   *  the salutation/honorific rules for every AI request going forward. See
+   *  ai/prompts.ts and ai/whatsappStyle.ts for how it shapes the prompt, and
+   *  REQUEST_SUCCESS below for the deterministic Junior-mode guarantee pass.
+   *  Defaults to "senior" so existing users see no behaviour change unless
+   *  they explicitly switch it (the toggle spec's Part 3 requirement). */
+  recipientType: RecipientType;
   signature: string;
   draftInput: string;
   followupInput: string;
@@ -112,6 +121,7 @@ export const initialAssistantState: AssistantState = {
   tone: "Neutral",
   customTone: "",
   outputMode: "text",
+  recipientType: "senior",
   signature: "",
   draftInput: "",
   followupInput: "",
@@ -132,6 +142,7 @@ export type AssistantAction =
   | { type: "SET_TONE"; tone: string }
   | { type: "SET_CUSTOM_TONE"; customTone: string }
   | { type: "SET_OUTPUT_MODE"; outputMode: OutputMode }
+  | { type: "SET_RECIPIENT_TYPE"; recipientType: RecipientType }
   | { type: "SET_SIGNATURE"; signature: string }
   | { type: "SET_DRAFT_INPUT"; text: string }
   | { type: "SET_FOLLOWUP_INPUT"; text: string }
@@ -167,6 +178,8 @@ export function assistantReducer(state: AssistantState, action: AssistantAction)
       return { ...state, customTone: action.customTone };
     case "SET_OUTPUT_MODE":
       return { ...state, outputMode: action.outputMode };
+    case "SET_RECIPIENT_TYPE":
+      return { ...state, recipientType: action.recipientType };
     case "SET_SIGNATURE":
       return { ...state, signature: action.signature };
     case "SET_DRAFT_INPUT":
@@ -191,22 +204,33 @@ export function assistantReducer(state: AssistantState, action: AssistantAction)
       // allowed to overwrite them (see the file header and Part 6/10 of the
       // editing-workflow spec this was built against).
       //
-      // WhatsApp-mode only: run two deterministic formatting passes
+      // WhatsApp-mode only: run three deterministic formatting passes
       // (whatsappClosing.ts) on the AI's text before it ever reaches the
-      // screen, rather than trusting the AI to have gotten either right:
+      // screen, rather than trusting the AI to have gotten any of them
+      // right:
       //  - applyClosingLine guarantees "For your kind info/permission/
-      //    consideration, sir." is present, correct, non-duplicated, and
-      //    immediately before "Regards" whenever the message's own content
-      //    calls for it.
+      //    consideration[, sir]." is present, correct (wording matching
+      //    state.recipientType), non-duplicated, and immediately before
+      //    "Regards" whenever the message's own content calls for it.
+      //  - applyRecipientEtiquette (Junior only — a no-op for Senior)
+      //    forces the exact "Assalamualaikum Dear," opener and scrubs any
+      //    stray "sir"/"Dear" the AI left elsewhere, e.g. carried over from
+      //    a Senior-style draft the user pasted in. Runs after
+      //    applyClosingLine so it sees the closing line in its final,
+      //    already-correct position and wording.
       //  - ensureGreetingBlankLine guarantees exactly one blank line
       //    between the greeting and the body — previously only shown by
       //    example in the style guide, never enforced, so it was
-      //    inconsistent.
-      // Both run once, here, at generation time only; neither is re-run
+      //    inconsistent. Runs last so it sees the final greeting line
+      //    (post-etiquette-pass) regardless of recipientType.
+      // All three run once, here, at generation time only; none is re-run
       // just because the user edits the box afterward (SET_AI_EDITED_DRAFT
       // below never calls them), so a deliberate manual edit or removal is
       // respected.
-      const text = state.outputMode === "whatsapp" ? ensureGreetingBlankLine(applyClosingLine(action.text)) : action.text;
+      const text =
+        state.outputMode === "whatsapp"
+          ? ensureGreetingBlankLine(applyRecipientEtiquette(applyClosingLine(action.text, state.recipientType), state.recipientType))
+          : action.text;
       return {
         ...state,
         loading: false,
@@ -236,9 +260,10 @@ export function assistantReducer(state: AssistantState, action: AssistantAction)
     case "CLEAR_ERROR":
       return { ...state, error: null };
     case "RESET":
-      // Settings-like fields (mode, tone/customTone, outputMode, signature) are
-      // preserved across a reset — they're user preferences, not session
-      // content. Everything that represents actual drafted text/conversation
+      // Settings-like fields (mode, tone/customTone, outputMode,
+      // recipientType, signature) are preserved across a reset — they're
+      // user preferences, not session content. Everything that represents
+      // actual drafted text/conversation
       // is cleared — including loadedHistoryRecordId: a Reset starts a
       // wholly fresh session, not an edit of whatever record was open.
       return {
@@ -247,6 +272,7 @@ export function assistantReducer(state: AssistantState, action: AssistantAction)
         tone: state.tone,
         customTone: state.customTone,
         outputMode: state.outputMode,
+        recipientType: state.recipientType,
         signature: state.signature,
       };
     case "LOAD_HISTORY_RECORD":

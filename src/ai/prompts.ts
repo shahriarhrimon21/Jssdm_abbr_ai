@@ -7,7 +7,7 @@
  * system prompt below says this explicitly so the model doesn't try to be
  * an abbreviation authority.
  */
-import type { OutputMode } from "./whatsappStyle.ts";
+import type { OutputMode, RecipientType } from "./whatsappStyle.ts";
 import { buildWhatsAppGuidance } from "./whatsappStyle.ts";
 
 export const TONES = [
@@ -46,12 +46,43 @@ export function toneInstruction(tone: string, customTone?: string): string {
 }
 
 /**
- * outputMode/signature are optional and default to plain "text" behaviour
- * (unchanged from before WhatsApp mode existed) so any existing call site
- * that doesn't pass them keeps working exactly as before.
+ * Senior/Junior recipient-type instruction, applied regardless of output
+ * mode (Text or WhatsApp) — the general "who is this addressed to" tone
+ * distinction lives here; the strict, structurally-enforced rules (the
+ * exact "Assalamualaikum Dear," opener, the no-'sir' closing lines) are
+ * WhatsApp-specific and live in whatsappStyle.ts's `junior` guidance plus
+ * whatsappClosing.ts's deterministic pass — see ai/state.ts's
+ * REQUEST_SUCCESS for how those two layers combine.
  */
-export function buildSystemPrompt(mode: AssistantMode, tone: string, customTone?: string, outputMode?: OutputMode, signature?: string): string {
+function recipientInstruction(recipientType: RecipientType): string {
+  if (recipientType === "junior") {
+    return (
+      "The recipient of this message is a JUNIOR — someone the user outranks or is senior to. Use professional, respectful military-office " +
+      "language WITHOUT 'Sir'/'Dear' honorifics repeated through the message."
+    );
+  }
+  return (
+    "The recipient of this message is a SENIOR — someone the user reports to or is junior to. Respectful military-office language using " +
+    "'Sir' terminology, as is customary in this context, is appropriate throughout."
+  );
+}
+
+/**
+ * outputMode/signature/recipientType are optional and default to plain
+ * "text" / "senior" behaviour (unchanged from before WhatsApp mode and the
+ * Senior/Junior toggle existed) so any existing call site that doesn't pass
+ * them keeps working exactly as before.
+ */
+export function buildSystemPrompt(
+  mode: AssistantMode,
+  tone: string,
+  customTone?: string,
+  outputMode?: OutputMode,
+  signature?: string,
+  recipientType: RecipientType = "senior",
+): string {
   const toneLine = toneInstruction(tone, customTone);
+  const recipLine = recipientInstruction(recipientType);
   let base: string;
   if (mode === "check") {
     base =
@@ -59,6 +90,8 @@ export function buildSystemPrompt(mode: AssistantMode, tone: string, customTone?
       "\n\nMode: Check & Polish. The user will give you a draft. Improve grammar, clarity, and structure while preserving their meaning and " +
       "any abbreviations/terms exactly as written. " +
       toneLine +
+      " " +
+      recipLine +
       " Return only the improved text unless the user asks a follow-up question about it.";
   } else {
     base =
@@ -66,10 +99,12 @@ export function buildSystemPrompt(mode: AssistantMode, tone: string, customTone?
       "\n\nMode: Generate. The user will describe what they want written (a memo, a paragraph, a message, etc.). Produce a complete draft that " +
       "fulfills the request. " +
       toneLine +
+      " " +
+      recipLine +
       " Return only the drafted text unless the user asks a follow-up question about it.";
   }
   if (outputMode === "whatsapp") {
-    base += "\n\n" + buildWhatsAppGuidance(signature);
+    base += "\n\n" + buildWhatsAppGuidance(signature, recipientType);
   }
   return base;
 }

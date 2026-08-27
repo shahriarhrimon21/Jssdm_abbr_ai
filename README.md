@@ -14,6 +14,18 @@ server (a serverless function) and is never shipped to the browser. The
 app deploys to **either Netlify or Vercel** — same repo, same code, no
 choice to make up front; see "Deploying" below for both.
 
+The AI assistant's WhatsApp-style message mode has a **Sending to: Senior /
+Junior** toggle (`src/ai/state.ts`'s `recipientType`, defaulting to Senior so
+existing behaviour is unchanged unless a user switches it). Senior keeps the
+familiar "Assalamualaikum Sir," opener and "sir"-suffixed closings; Junior
+forces an exact "Assalamualaikum Dear," opener and strips "sir"/repeated
+"Dear" from the rest of the message, deterministically — see
+`src/ai/whatsappClosing.ts`'s `applyRecipientEtiquette` — regardless of what
+the AI itself produced. Separately, the AI is instructed (and, for the
+WhatsApp mode's numbered points, regression-tested) not to over-formalize the
+user's own already-clear military wording or drop a reporting point — see
+`WHATSAPP_STYLE.preservation` in `src/ai/whatsappStyle.ts`.
+
 ## Project layout
 
 ```

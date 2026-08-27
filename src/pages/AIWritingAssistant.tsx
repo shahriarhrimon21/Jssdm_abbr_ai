@@ -147,7 +147,7 @@ export default function AIWritingAssistant({
     }, REQUEST_TIMEOUT_MS);
 
     dispatch({ type: "REQUEST_START" });
-    const systemPrompt = buildSystemPrompt(state.mode, state.tone, state.customTone, state.outputMode, state.signature);
+    const systemPrompt = buildSystemPrompt(state.mode, state.tone, state.customTone, state.outputMode, state.signature, state.recipientType);
     const result = await callAI({
       provider,
       systemPrompt,
@@ -360,6 +360,28 @@ export default function AIWritingAssistant({
       {/* ---------------- request panel ---------------- */}
       <div className="panel">
         <div className="toolbar">
+          <div className="tool">
+            <label className="flabel">Sending to</label>
+            <Tooltip label="Who this message is addressed to — changes the salutation and honorific usage. Defaults to Senior.">
+              <div className="seg">
+                <button
+                  className={state.recipientType !== "junior" ? "active" : ""}
+                  onClick={() => dispatch({ type: "SET_RECIPIENT_TYPE", recipientType: "senior" })}
+                  aria-pressed={state.recipientType !== "junior"}
+                >
+                  Senior
+                </button>
+                <button
+                  className={state.recipientType === "junior" ? "active" : ""}
+                  onClick={() => dispatch({ type: "SET_RECIPIENT_TYPE", recipientType: "junior" })}
+                  aria-pressed={state.recipientType === "junior"}
+                >
+                  Junior
+                </button>
+              </div>
+            </Tooltip>
+          </div>
+
           <div className="tool">
             <label className="flabel">Output style</label>
             <div className="seg">

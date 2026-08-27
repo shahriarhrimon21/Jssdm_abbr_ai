@@ -251,3 +251,124 @@ test("SET_LOADED_HISTORY_RECORD_ID sets the id after a Save as New, so a further
   s = assistantReducer(s, { type: "SET_LOADED_HISTORY_RECORD_ID", recordId: "mh_new" });
   assert.equal(s.loadedHistoryRecordId, "mh_new");
 });
+
+/* ---- Senior/Junior recipient-type toggle ---- */
+
+test("initialAssistantState defaults recipientType to senior (Part 3: existing users see no behaviour change)", () => {
+  assert.equal(initialAssistantState.recipientType, "senior");
+});
+
+test("SET_RECIPIENT_TYPE toggles independently of everything else", () => {
+  let s = assistantReducer(initialAssistantState, { type: "SET_RECIPIENT_TYPE", recipientType: "junior" });
+  assert.equal(s.recipientType, "junior");
+  s = assistantReducer(s, { type: "SET_TONE", tone: "Urgent" });
+  assert.equal(s.recipientType, "junior", "changing an unrelated field must not reset recipientType");
+});
+
+test("RESET preserves recipientType alongside mode/tone/outputMode/signature (a setting, not session content)", () => {
+  let s = assistantReducer(initialAssistantState, { type: "SET_RECIPIENT_TYPE", recipientType: "junior" });
+  s = assistantReducer(s, { type: "SET_ORIGINAL", text: "orig" });
+  s = assistantReducer(s, { type: "RESET" });
+  assert.equal(s.recipientType, "junior");
+  assert.equal(s.original, "");
+});
+
+test("REQUEST_SUCCESS in whatsapp+senior mode keeps the Senior 'sir' closing/greeting behaviour unchanged", () => {
+  let s = assistantReducer(initialAssistantState, { type: "SET_OUTPUT_MODE", outputMode: "whatsapp" });
+  s = assistantReducer(s, {
+    type: "REQUEST_SUCCESS",
+    text: "Assalamualaikum Sir,\nThe training has been completed successfully.\nRegards",
+    userMessage: "go",
+  });
+  assert.match(s.aiFinal!, /^Assalamualaikum Sir,/);
+  assert.match(s.aiFinal!, /For your kind info, sir\.\nRegards$/);
+});
+
+test("REQUEST_SUCCESS in whatsapp+junior mode forces the Dear opener and a sir-free closing, even when the AI ignored the instruction", () => {
+  let s = assistantReducer(initialAssistantState, { type: "SET_OUTPUT_MODE", outputMode: "whatsapp" });
+  s = assistantReducer(s, { type: "SET_RECIPIENT_TYPE", recipientType: "junior" });
+  // Simulate the AI carrying over Senior-style "sir" wording from the raw input anyway.
+  s = assistantReducer(s, {
+    type: "REQUEST_SUCCESS",
+    text: "Assalamualaikum Sir,\n1. After firing, man and materials are all correct, sir.\nRegards",
+    userMessage: "go",
+  });
+  assert.match(s.aiFinal!, /^Assalamualaikum Dear,/);
+  assert.match(s.aiFinal!, /1\. After firing, man and materials are all correct\.$/m);
+  assert.match(s.aiFinal!, /For your kind info\.\nRegards$/);
+  assert.doesNotMatch(s.aiFinal!, /\bsir\b/i);
+  // The editable draft the user sees starts out equal to the corrected text too.
+  assert.equal(s.aiEditedDraft, s.aiFinal);
+});
+
+test("REQUEST_SUCCESS in text mode is unaffected by recipientType (no WhatsApp deterministic passes run)", () => {
+  let s = assistantReducer(initialAssistantState, { type: "SET_RECIPIENT_TYPE", recipientType: "junior" });
+  s = assistantReducer(s, { type: "REQUEST_SUCCESS", text: "Plain generated text, sir.", userMessage: "go" });
+  assert.equal(s.aiFinal, "Plain generated text, sir.", "text mode never runs the WhatsApp greeting/closing/etiquette passes");
+});
+
+test("switching Senior -> Junior and regenerating (a fresh REQUEST_SUCCESS on the same original) picks up the new recipientType without re-entering the input", () => {
+  let s = assistantReducer(initialAssistantState, { type: "SET_OUTPUT_MODE", outputMode: "whatsapp" });
+  s = assistantReducer(s, { type: "SET_ORIGINAL", text: "after firing man and materials are okay, sir" });
+  s = assistantReducer(s, {
+    type: "REQUEST_SUCCESS",
+    text: "Assalamualaikum Sir,\nAfter firing, man and materials are all correct, sir.\nRegards",
+    userMessage: "after firing man and materials are okay, sir",
+  });
+  assert.match(s.aiFinal!, /^Assalamualaikum Sir,/);
+
+  // Toggle to Junior — original is untouched, ready for a regenerate.
+  s = assistantReducer(s, { type: "SET_RECIPIENT_TYPE", recipientType: "junior" });
+  assert.equal(s.original, "after firing man and materials are okay, sir", "the toggle must not clear the original request");
+
+  // "Regenerate" re-sends the same original as a fresh REQUEST_SUCCESS.
+  s = assistantReducer(s, {
+    type: "REQUEST_SUCCESS",
+    text: "Assalamualaikum Dear,\nAfter firing, man and materials are all correct.\nRegards",
+    userMessage: "after firing man and materials are okay, sir",
+  });
+  assert.match(s.aiFinal!, /^Assalamualaikum Dear,/);
+  assert.doesNotMatch(s.aiFinal!, /\bsir\b/i);
+});
+
+test("switching Junior -> Senior and regenerating restores the Senior 'sir' behaviour", () => {
+  let s = assistantReducer(initialAssistantState, { type: "SET_OUTPUT_MODE", outputMode: "whatsapp" });
+  s = assistantReducer(s, { type: "SET_RECIPIENT_TYPE", recipientType: "junior" });
+  s = assistantReducer(s, {
+    type: "REQUEST_SUCCESS",
+    text: "Assalamualaikum Dear,\nThe training has been completed successfully.\nRegards",
+    userMessage: "go",
+  });
+  assert.doesNotMatch(s.aiFinal!, /\bsir\b/i);
+
+  s = assistantReducer(s, { type: "SET_RECIPIENT_TYPE", recipientType: "senior" });
+  s = assistantReducer(s, {
+    type: "REQUEST_SUCCESS",
+    text: "Assalamualaikum Sir,\nThe training has been completed successfully.\nRegards",
+    userMessage: "go",
+  });
+  assert.match(s.aiFinal!, /^Assalamualaikum Sir,/);
+  assert.match(s.aiFinal!, /For your kind info, sir\.\nRegards$/);
+});
+
+test("editing, copying (via aiEditedDraft/finalEdited), and sending continue to work correctly after introducing the toggle", () => {
+  let s = assistantReducer(initialAssistantState, { type: "SET_OUTPUT_MODE", outputMode: "whatsapp" });
+  s = assistantReducer(s, { type: "SET_RECIPIENT_TYPE", recipientType: "junior" });
+  s = assistantReducer(s, {
+    type: "REQUEST_SUCCESS",
+    text: "Assalamualaikum Sir,\nThe training has been completed successfully.\nRegards",
+    userMessage: "go",
+  });
+  // Editable draft (what Copy reads) starts out equal to the corrected text.
+  assert.equal(s.aiEditedDraft, s.aiFinal);
+  // Editing still only ever touches aiEditedDraft.
+  s = assistantReducer(s, { type: "SET_AI_EDITED_DRAFT", text: s.aiEditedDraft + " Extra line." });
+  assert.notEqual(s.aiEditedDraft, s.aiFinal);
+  // JSSDM engine run + final edit (Copy message reads finalEdited) still work unchanged.
+  s = assistantReducer(s, { type: "JSSDM_GENERATED", text: "engine output", spans: [] });
+  assert.equal(s.finalEdited, "engine output");
+  s = assistantReducer(s, { type: "SET_FINAL_EDITED", text: "engine output, hand-edited" });
+  assert.equal(s.finalEdited, "engine output, hand-edited");
+  // recipientType itself is untouched by any of the above.
+  assert.equal(s.recipientType, "junior");
+});
